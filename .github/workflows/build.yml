@@ -1,0 +1,70 @@
+name: Build Argentas
+
+concurrency:
+  group: argentas-build
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Prepare Argentas
+        run: python3 scripts/prepare_argentas.py
+
+      - name: Validate source
+        run: |
+          test -s app/src/main/assets/index.html
+          python3 - <<'PY'
+          import re, subprocess
+          from pathlib import Path
+          html=Path("app/src/main/assets/index.html").read_text(encoding="utf-8")
+          scripts=re.findall(r"<script(?:\s[^>]*)?>(.*?)</script>", html, flags=re.S|re.I)
+          for i,script in enumerate(scripts):
+              p=Path(f"/tmp/argentas-script-{i}.js")
+              p.write_text(script,encoding="utf-8")
+              subprocess.run(["node","--check",str(p)],check=True)
+          print(f"Validated {len(scripts)} embedded scripts")
+          PY
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Build debug APK
+        run: gradle assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Argentas-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Publish latest APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          if gh release view latest >/dev/null 2>&1; then
+            gh release upload latest "$APK" --clobber
+            gh release edit latest --title "Argentas — última versión" --notes "Build ${{ github.run_number }} · Commit ${{ github.sha }}"
+          else
+            gh release create latest "$APK" --title "Argentas — última versión" --notes "Build ${{ github.run_number }} · Commit ${{ github.sha }}" --target "${GITHUB_SHA}"
+          fi

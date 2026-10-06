@@ -14,11 +14,9 @@
 
     <application
         android:allowBackup="true"
-        android:label="Argentas-Comandas"
+        android:label="Argentas"
         android:supportsRtl="true"
-        android:theme="@style/Theme.ArgentasComandas"
-        android:icon="@drawable/argentas_icon"
-        android:roundIcon="@drawable/argentas_icon">
+        android:theme="@style/Theme.ArgentasComandas">
         <service
             android:name=".ArgentasConnectionService"
             android:enabled="true"

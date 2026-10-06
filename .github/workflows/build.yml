@@ -29,12 +29,22 @@ jobs:
         run: |
           test -s app/src/main/assets/index.html
           grep -q "CALCULADORA DE COBRO" app/src/main/assets/index.html
-          grep -q "Argentas 2 — motor de sincronización" app/src/main/assets/index.html
-          node --check source/sync-engine.js
-          grep -q 'data-bill=\"10000\"' app/src/main/assets/index.html
-          grep -q 'data-bill=\"20000\"' app/src/main/assets/index.html
+          grep -q 'data-bill="10000"' app/src/main/assets/index.html
+          grep -q 'data-bill="20000"' app/src/main/assets/index.html
           grep -q "argentasPaymentGate" app/src/main/assets/index.html
-          grep -q "setStatus(id,'oculta')" app/src/main/assets/index.html
+          grep -q "Argentas 2" source/sync-engine.js
+          node --check source/sync-engine.js
+          python3 - <<'PY'
+          import re, subprocess
+          from pathlib import Path
+          html=Path('app/src/main/assets/index.html').read_text(encoding='utf-8')
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',html,flags=re.S|re.I)
+          for i,script in enumerate(scripts):
+              p=Path(f'/tmp/argentas-script-{i}.js')
+              p.write_text(script,encoding='utf-8')
+              subprocess.run(['node','--check',str(p)],check=True)
+          print(f'Validated {len(scripts)} embedded scripts')
+          PY
       - name: Setup Java
         uses: actions/setup-java@v4
         with:

@@ -189,9 +189,12 @@ function renderNew(){document.getElementById('ac-num').textContent='#'+nextDaily
 function normProductName(n){return String(n||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/\\s+/g,' ').trim()}
 function customizationType(x){
   var n=normProductName(x&&x.name);
+  if(/pancho|panchos|hot ?dog/.test(n))return null;
   if(/hamburguesa|burger/.test(n))return 'hamburguesa';
-  if(/milanesa/.test(n)&&/con queso/.test(n))return 'milanesa_con_queso';
-  if(/milanesa/.test(n))return 'milanesa_sin_queso';
+  if(/milanesa|milacombo|mila\\b/.test(n)){
+    if(/con queso|conqueso/.test(n))return 'milanesa_con_queso';
+    return 'milanesa_sin_queso';
+  }
   return null;
 }
 function customizationNote(x){
@@ -199,19 +202,51 @@ function customizationNote(x){
   if(!t)return '';
   if(x&&x.noLechuga)a.push('SIN LECHUGA');
   if(x&&x.noTomate)a.push('SIN TOMATE');
-  if((t==='hamburguesa'||t==='milanesa_con_queso')&&x&&x.cheese==='none')a.push('SIN QUESO');
-  else if((t==='hamburguesa'||t==='milanesa_con_queso')&&x&&x.cheese==='cheddar')a.push('CHEDDAR');
-  else if((t==='hamburguesa'||t==='milanesa_con_queso')&&x&&x.cheese==='provoleta')a.push('PROVOLETA');
+  if(t==='hamburguesa'){
+    if(x&&x.cheese==='none')a.push('SIN QUESO');
+    else if(x&&x.cheese==='cheddar')a.push('CHEDDAR');
+    else if(x&&x.cheese==='provoleta')a.push('PROVOLETA');
+  }else if(t==='milanesa_con_queso'){
+    if(x&&x.cheese==='cheddar')a.push('CHEDDAR');
+    else if(x&&x.cheese==='provoleta')a.push('PROVOLETA');
+  }
   return a.join(' · ');
 }
+function customizationTitle(type){
+  return type==='hamburguesa'?'PERSONALIZAR HAMBURGUESA':(type==='milanesa_con_queso'?'PERSONALIZAR MILANESA CON QUESO':'PERSONALIZAR MILANESA');
+}
+function ensureCustomizationModal(){
+  var m=document.getElementById('ac-custom-modal');
+  if(m)return m;
+  m=document.createElement('div');m.id='ac-custom-modal';m.style.cssText='position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,.82);display:none;align-items:center;justify-content:center;padding:16px';
+  m.innerHTML='<div style="width:min(430px,100%);background:#181818;border:1px solid #3a3a3a;border-radius:18px;padding:18px;box-shadow:0 20px 60px #000"><h3 id="ac-custom-title" style="margin:0 0 5px;color:#E8B84A;font-size:18px"></h3><div id="ac-custom-product" class="ac-muted" style="margin-bottom:14px"></div><label style="display:block;margin:10px 0;font-size:13px"><input type="checkbox" id="ac-custom-lechuga"> Sin lechuga</label><label style="display:block;margin:10px 0;font-size:13px"><input type="checkbox" id="ac-custom-tomate"> Sin tomate</label><div id="ac-custom-cheese" style="margin-top:12px"><div style="font-size:11px;font-weight:900;color:#E8B84A;margin-bottom:7px">QUESO</div><label style="display:block;margin:7px 0;font-size:13px"><input type="radio" name="ac-custom-cheese" value="none"> Sin queso</label><label style="display:block;margin:7px 0;font-size:13px"><input type="radio" name="ac-custom-cheese" value="cheddar"> Cheddar</label><label style="display:block;margin:7px 0;font-size:13px"><input type="radio" name="ac-custom-cheese" value="provoleta"> Provoleta</label></div><div class="ac-actions" style="margin-top:16px"><button type="button" class="ac-btn ac-dark" id="ac-custom-cancel">CANCELAR</button><button type="button" class="ac-btn ac-primary" id="ac-custom-add">AGREGAR</button></div></div>';
+  document.body.appendChild(m);
+  return m;
+}
+var customizationPendingProduct=null;
+function closeCustomization(){var m=document.getElementById('ac-custom-modal');if(m)m.style.display='none';customizationPendingProduct=null}
+function addConfiguredProduct(x,noLechuga,noTomate,cheese){
+  var line={productId:x.id,name:x.name,price:x.price,qty:1,noLechuga:!!noLechuga,noTomate:!!noTomate,cheese:cheese||null};
+  var same=draft.find(function(y){return y.productId===line.productId&&!!y.noLechuga===line.noLechuga&&!!y.noTomate===line.noTomate&&(y.cheese||null)===(line.cheese||null)});
+  if(same)same.qty++;else draft.push(line);
+  renderDraft();
+}
+function openCustomization(x,type){
+  var m=ensureCustomizationModal(),title=m.querySelector('#ac-custom-title'),prod=m.querySelector('#ac-custom-product'),l=m.querySelector('#ac-custom-lechuga'),t=m.querySelector('#ac-custom-tomate'),box=m.querySelector('#ac-custom-cheese');
+  customizationPendingProduct=x;title.textContent=customizationTitle(type);prod.textContent=x.name+' · '+money(x.price);l.checked=false;t.checked=false;
+  box.style.display=type==='hamburguesa'||type==='milanesa_con_queso'?'block':'none';
+  m.querySelectorAll('input[name="ac-custom-cheese"]').forEach(function(r){r.checked=false});
+  m.style.display='flex';
+}
 function add(id){
-  var x=p(id),type=customizationType(x),base={productId:id,name:x.name,price:x.price,qty:1,noLechuga:false,noTomate:false,cheese:null};
-  var l=draft.find(function(y){
-    return y.productId===id&&!y.noLechuga&&!y.noTomate&&!y.cheese;
-  });
-  if(l)l.qty++;
-  else draft.push(base);
-  renderDraft()
+  var x=p(id),type=customizationType(x);
+  if(!x)return;
+  if(!type){
+    var plain=draft.find(function(y){return y.productId===id&&!y.noLechuga&&!y.noTomate&&!y.cheese});
+    if(plain)plain.qty++;else draft.push({productId:id,name:x.name,price:x.price,qty:1,noLechuga:false,noTomate:false,cheese:null});
+    renderDraft();return;
+  }
+  openCustomization(x,type);
 }
 function renderDraft(){
   var e=document.getElementById('ac-draft');
@@ -221,30 +256,11 @@ function renderDraft(){
   }
   e.className='';e.style.textAlign='left';
   e.innerHTML=draft.map(function(x,i){
-    var type=customizationType(x),note=customizationNote(x),options='';
-    if(type){
-      var title=type==='hamburguesa'?'PERSONALIZAR HAMBURGUESA':(type==='milanesa_con_queso'?'PERSONALIZAR MILANESA CON QUESO':'PERSONALIZAR MILANESA');
-      options='<div style="margin-top:8px;padding:9px 10px;border:1px solid #333;border-radius:10px;background:#111"><div style="font-size:10px;font-weight:1000;letter-spacing:.08em;color:#E8B84A;margin-bottom:7px">'+title+'</div><label style="display:block;margin:6px 0;font-size:12px"><input type="checkbox" data-opt="lechuga" data-i="'+i+'" '+(x.noLechuga?'checked':'')+'> Sin lechuga</label><label style="display:block;margin:6px 0;font-size:12px"><input type="checkbox" data-opt="tomate" data-i="'+i+'" '+(x.noTomate?'checked':'')+'> Sin tomate</label>';
-      if(type==='hamburguesa'){
-        options+='<div style="margin-top:8px;font-size:11px;font-weight:900">Queso</div><label style="display:block;margin:5px 0;font-size:12px"><input type="radio" name="queso-'+i+'" data-opt="queso" data-value="none" data-i="'+i+'" '+(x.cheese==='none'?'checked':'')+'> Sin queso</label><label style="display:block;margin:5px 0;font-size:12px"><input type="radio" name="queso-'+i+'" data-opt="queso" data-value="cheddar" data-i="'+i+'" '+(x.cheese==='cheddar'?'checked':'')+'> Cheddar</label><label style="display:block;margin:5px 0;font-size:12px"><input type="radio" name="queso-'+i+'" data-opt="queso" data-value="provoleta" data-i="'+i+'" '+(x.cheese==='provoleta'?'checked':'')+'> Provoleta</label>';
-      } else if(type==='milanesa_con_queso'){
-        options+='<div style="margin-top:8px;font-size:11px;font-weight:900">Queso</div><label style="display:block;margin:5px 0;font-size:12px"><input type="radio" name="queso-'+i+'" data-opt="queso" data-value="cheddar" data-i="'+i+'" '+(x.cheese==='cheddar'?'checked':'')+'> Cheddar</label><label style="display:block;margin:5px 0;font-size:12px"><input type="radio" name="queso-'+i+'" data-opt="queso" data-value="provoleta" data-i="'+i+'" '+(x.cheese==='provoleta'?'checked':'')+'> Provoleta</label>';
-      }
-      options+='</div>';
-    }
-    return '<div style="padding:10px 0;border-bottom:1px solid #2c2c2c"><div class="ac-row"><span style="font-weight:800">'+x.qty+' × '+x.name+(note?' <span class="ac-muted">('+note+')</span>':'')+'</span><span>'+money(x.qty*x.price)+' <button class="ac-btn ac-dark" data-i="'+i+'" data-d="-1">−</button><button class="ac-btn ac-dark" data-i="'+i+'" data-d="1">+</button></span></div>'+options+'</div>'
+    var note=customizationNote(x);
+    return '<div style="padding:10px 0;border-bottom:1px solid #2c2c2c"><div class="ac-row"><span style="font-weight:800">'+x.qty+' × '+x.name+(note?' <span class="ac-muted">('+note+')</span>':'')+'</span><span>'+money(x.qty*x.price)+' <button class="ac-btn ac-dark" data-i="'+i+'" data-d="-1">−</button><button class="ac-btn ac-dark" data-i="'+i+'" data-d="1">+</button></span></div></div>'
   }).join('');
   e.querySelectorAll('[data-i][data-d]').forEach(function(b){
     b.onclick=function(){var i=Number(b.dataset.i),d=Number(b.dataset.d);draft[i].qty+=d;if(draft[i].qty<=0)draft.splice(i,1);renderDraft()}
-  });
-  e.querySelectorAll('input[data-opt]').forEach(function(input){
-    input.onchange=function(){
-      var i=Number(input.dataset.i),x=draft[i];if(!x)return;
-      if(input.dataset.opt==='lechuga')x.noLechuga=!!input.checked;
-      else if(input.dataset.opt==='tomate')x.noTomate=!!input.checked;
-      else if(input.dataset.opt==='queso')x.cheese=input.checked?input.dataset.value:null;
-      renderDraft()
-    }
   });
   document.getElementById('ac-total').textContent=''
 }
@@ -405,6 +421,20 @@ function openArgentasComandas(){var p=document.getElementById('argentas-comandas
 function hookOriginalPaymentSelection(){}
 hookOriginalPaymentSelection();
 document.querySelectorAll('[data-pay-key]').forEach(function(b){b.onclick=function(){var k=b.getAttribute('data-pay-key'),v=paymentField==='transfer'?paymentTransfer:paymentReceived;if(k==='clear')v=0;else if(k==='back')v=Math.floor(v/10);else v=Math.min(999999999,Number(String(v)+k));if(paymentField==='transfer')paymentTransfer=v;else paymentReceived=v;updateCashPayment()}});var st=document.getElementById('ac-pay-select-transfer'),sc=document.getElementById('ac-pay-select-cash');if(st)st.onclick=function(){paymentField='transfer';updateCashPayment()};if(sc)sc.onclick=function(){paymentField='cash';updateCashPayment()};document.getElementById('ac-pay-exact').onclick=function(){var o=pendingPaymentId?db.orders.find(function(x){return x.id===pendingPaymentId}):null;var total=Number(o?o.total:checkoutTotal)||0;if((o||checkoutOnly)){if(paymentCombined){paymentField='cash';paymentReceived=Math.max(0,total-Number(paymentTransfer||0))}else paymentReceived=total;updateCashPayment();confirmCashPayment()}};document.getElementById('ac-pay-confirm').onclick=confirmCashPayment;document.getElementById('ac-pay-cancel').onclick=closeCashPayment;document.getElementById('ac-undo').onclick=undo;document.getElementById('ac-close').onclick=function(){document.getElementById('argentas-comandas-panel').classList.remove('open')};document.getElementById('ac-clear').onclick=function(){draft=[];renderDraft()};document.getElementById('ac-create').onclick=createOrder;
+(function(){
+  var m=ensureCustomizationModal();
+  m.querySelector('#ac-custom-cancel').onclick=closeCustomization;
+  m.querySelector('#ac-custom-add').onclick=function(){
+    var x=customizationPendingProduct;if(!x)return;
+    var type=customizationType(x),cheese=null;
+    if(type==='hamburguesa'||type==='milanesa_con_queso'){
+      var r=m.querySelector('input[name="ac-custom-cheese"]:checked');cheese=r?r.value:null;
+    }
+    addConfiguredProduct(x,m.querySelector('#ac-custom-lechuga').checked,m.querySelector('#ac-custom-tomate').checked,cheese);
+    closeCustomization();
+  };
+})();
+
 document.getElementById('ac-refresh').onclick=function(){if(window.ArgentasNativeBluetooth){window.ArgentasNativeBluetooth.refresh();var m=document.getElementById('ac-btmsg');if(m)m.textContent='🔎 Buscando dispositivos Wi-Fi Direct cercanos…'}};
 document.querySelectorAll('#argentas-comandas-panel .ac-tabs button').forEach(function(b){b.onclick=function(){document.querySelectorAll('#argentas-comandas-panel .ac-tabs button').forEach(function(x){x.classList.remove('on')});b.classList.add('on');['nueva','lista','ventas','bt'].forEach(function(x){document.getElementById('ac-'+x).style.display=x===b.dataset.acTab?'block':'none'});if(b.dataset.acTab==='bt'&&window.ArgentasNativeBluetooth){window.ArgentasNativeBluetooth.refresh();var m=document.getElementById('ac-btmsg');if(m)m.textContent='Listo. Tocá «Mostrar dispositivos» para buscar equipos cercanos.';}renderAll()}});
 })();

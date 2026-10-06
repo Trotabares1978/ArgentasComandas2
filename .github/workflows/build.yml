@@ -24,11 +24,13 @@ jobs:
           test -f source/sync-engine.js
           test -f docs/SYNC_PROTOCOL.md
       - name: Preparar
-        run: python3 scripts/prepare_argentas.py
+        run: python3 scripts/prepare_v2.py
       - name: Validar fuente
         run: |
           test -s app/src/main/assets/index.html
           grep -q "CALCULADORA DE COBRO" app/src/main/assets/index.html
+          grep -q "Argentas 2 — motor de sincronización" app/src/main/assets/index.html
+          node --check source/sync-engine.js
           grep -q 'data-bill=\"10000\"' app/src/main/assets/index.html
           grep -q 'data-bill=\"20000\"' app/src/main/assets/index.html
           grep -q "argentasPaymentGate" app/src/main/assets/index.html

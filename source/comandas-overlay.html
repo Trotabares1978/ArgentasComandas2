@@ -223,6 +223,22 @@ function ensureCustomizationModal(){
   m=document.createElement('div');m.id='ac-custom-modal';m.style.cssText='position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,.82);display:none;align-items:center;justify-content:center;padding:16px';
   m.innerHTML='<div style="width:min(430px,100%);background:#181818;border:1px solid #3a3a3a;border-radius:18px;padding:18px;box-shadow:0 20px 60px #000"><h3 id="ac-custom-title" style="margin:0 0 5px;color:#E8B84A;font-size:18px"></h3><div id="ac-custom-product" class="ac-muted" style="margin-bottom:14px"></div><label style="display:block;margin:10px 0;font-size:13px"><input type="checkbox" id="ac-custom-lechuga"> Sin lechuga</label><label style="display:block;margin:10px 0;font-size:13px"><input type="checkbox" id="ac-custom-tomate"> Sin tomate</label><div id="ac-custom-cheese" style="margin-top:12px"><div style="font-size:11px;font-weight:900;color:#E8B84A;margin-bottom:7px">QUESO</div><label style="display:block;margin:7px 0;font-size:13px"><input type="radio" name="ac-custom-cheese" value="none"> Sin queso</label><label style="display:block;margin:7px 0;font-size:13px"><input type="radio" name="ac-custom-cheese" value="cheddar"> Cheddar</label><label style="display:block;margin:7px 0;font-size:13px"><input type="radio" name="ac-custom-cheese" value="provoleta"> Provoleta</label></div><div class="ac-actions" style="margin-top:16px"><button type="button" class="ac-btn ac-dark" id="ac-custom-cancel">CANCELAR</button><button type="button" class="ac-btn ac-primary" id="ac-custom-add">AGREGAR</button></div></div>';
   document.body.appendChild(m);
+  m.querySelector('#ac-custom-cancel').onclick=function(){closeCustomization()};
+  m.querySelector('#ac-custom-add').onclick=function(){
+    var x=customizationPendingProduct;
+    if(!x)return;
+    var l=m.querySelector('#ac-custom-lechuga'),t=m.querySelector('#ac-custom-tomate');
+    var r=m.querySelector('input[name="ac-custom-cheese"]:checked');
+    var type=customizationType(x);
+    var cheese=r?r.value:null;
+    if(type==='hamburguesa'&&!cheese)cheese='none';
+    if(type==='milanesa_con_queso'&&!cheese){
+      alert('Elegí Cheddar o Provoleta.');
+      return;
+    }
+    addConfiguredProduct(x,l.checked,t.checked,cheese);
+    closeCustomization();
+  };
   return m;
 }
 var customizationPendingProduct=null;

@@ -30,15 +30,10 @@ jobs:
 
       - name: Prepare icon
         run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq imagemagick
           ICON="app/src/main/res/drawable/argentas_icon.png"
-          if command -v magick >/dev/null 2>&1; then
-            magick "$ICON" -fuzz 8% -transparent "#ff00ff" -trim +repage -resize 512x512 "$ICON"
-          elif command -v convert >/dev/null 2>&1; then
-            convert "$ICON" -fuzz 8% -transparent "#ff00ff" -trim +repage -resize 512x512 "$ICON"
-          else
-            echo "ImageMagick no está disponible"
-            exit 1
-          fi
+          magick "$ICON" -fuzz 8% -transparent "#ff00ff" -trim +repage -resize 512x512 "$ICON"
 
       - name: Validate source
         run: |

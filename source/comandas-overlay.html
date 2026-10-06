@@ -186,18 +186,26 @@ function mergeProductsIntoArgentas(remote){
   }catch(e){console.warn('No se pudieron devolver productos a Argentas',e);return false}
 }
 function renderNew(){document.getElementById('ac-num').textContent='#'+nextDailyNumber(todayKey());document.getElementById('ac-grid').innerHTML=db.products.filter(function(x){return x.active!==false}).map(function(x){return '<button class="ac-prod" data-p="'+x.id+'"><b>'+x.name+'</b><span>'+money(x.price)+'</span></button>'}).join('');document.querySelectorAll('#ac-grid [data-p]').forEach(function(b){b.onclick=function(){add(b.getAttribute('data-p'))}});renderDraft()}
-function isBurgerLine(x){return !!(x&&/hamburguesa|burger/i.test(String(x.name||'')))}
-function burgerNote(x){
-  var a=[];
+function normProductName(n){return String(n||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/\\s+/g,' ').trim()}
+function customizationType(x){
+  var n=normProductName(x&&x.name);
+  if(/hamburguesa|burger/.test(n))return 'hamburguesa';
+  if(/milanesa/.test(n)&&/sin queso/.test(n))return 'milanesa_sin_queso';
+  if(/milanesa/.test(n)&&/con queso/.test(n))return 'milanesa_con_queso';
+  return null;
+}
+function customizationNote(x){
+  var a=[],t=customizationType(x);
+  if(!t)return '';
   if(x&&x.noLechuga)a.push('SIN LECHUGA');
   if(x&&x.noTomate)a.push('SIN TOMATE');
-  if(x&&x.cheese==='none')a.push('SIN QUESO');
-  else if(x&&x.cheese==='cheddar')a.push('CHEDDAR');
-  else if(x&&x.cheese==='provoleta')a.push('PROVOLETA');
+  if((t==='hamburguesa'||t==='milanesa_con_queso')&&x&&x.cheese==='none')a.push('SIN QUESO');
+  else if((t==='hamburguesa'||t==='milanesa_con_queso')&&x&&x.cheese==='cheddar')a.push('CHEDDAR');
+  else if((t==='hamburguesa'||t==='milanesa_con_queso')&&x&&x.cheese==='provoleta')a.push('PROVOLETA');
   return a.join(' · ');
 }
 function add(id){
-  var x=p(id),base={productId:id,name:x.name,price:x.price,qty:1,noLechuga:false,noTomate:false,cheese:null};
+  var x=p(id),type=customizationType(x),base={productId:id,name:x.name,price:x.price,qty:1,noLechuga:false,noTomate:false,cheese:null};
   var l=draft.find(function(y){
     return y.productId===id&&!y.noLechuga&&!y.noTomate&&!y.cheese;
   });
@@ -213,8 +221,15 @@ function renderDraft(){
   }
   e.className='';e.style.textAlign='left';
   e.innerHTML=draft.map(function(x,i){
-    var note=burgerNote(x);
-    var options=isBurgerLine(x)?'<div style="margin-top:8px;padding:9px 10px;border:1px solid #333;border-radius:10px;background:#111"><div style="font-size:10px;font-weight:1000;letter-spacing:.08em;color:#E8B84A;margin-bottom:7px">PERSONALIZAR HAMBURGUESA</div><label style="display:block;margin:6px 0;font-size:12px"><input type="checkbox" data-opt="lechuga" data-i="'+i+'" '+(x.noLechuga?'checked':'')+'> Sin lechuga</label><label style="display:block;margin:6px 0;font-size:12px"><input type="checkbox" data-opt="tomate" data-i="'+i+'" '+(x.noTomate?'checked':'')+'> Sin tomate</label><div style="margin-top:8px;font-size:11px;font-weight:900">Queso</div><label style="display:block;margin:5px 0;font-size:12px"><input type="radio" name="queso-'+i+'" data-opt="queso" data-value="none" data-i="'+i+'" '+(x.cheese==='none'?'checked':'')+'> Sin queso</label><label style="display:block;margin:5px 0;font-size:12px"><input type="radio" name="queso-'+i+'" data-opt="queso" data-value="cheddar" data-i="'+i+'" '+(x.cheese==='cheddar'?'checked':'')+'> Cheddar</label><label style="display:block;margin:5px 0;font-size:12px"><input type="radio" name="queso-'+i+'" data-opt="queso" data-value="provoleta" data-i="'+i+'" '+(x.cheese==='provoleta'?'checked':'')+'> Provoleta</label></div>':'';
+    var type=customizationType(x),note=customizationNote(x),options='';
+    if(type){
+      var title=type==='hamburguesa'?'PERSONALIZAR HAMBURGUESA':(type==='milanesa_con_queso'?'PERSONALIZAR MILANESA CON QUESO':'PERSONALIZAR MILANESA');
+      options='<div style="margin-top:8px;padding:9px 10px;border:1px solid #333;border-radius:10px;background:#111"><div style="font-size:10px;font-weight:1000;letter-spacing:.08em;color:#E8B84A;margin-bottom:7px">'+title+'</div><label style="display:block;margin:6px 0;font-size:12px"><input type="checkbox" data-opt="lechuga" data-i="'+i+'" '+(x.noLechuga?'checked':'')+'> Sin lechuga</label><label style="display:block;margin:6px 0;font-size:12px"><input type="checkbox" data-opt="tomate" data-i="'+i+'" '+(x.noTomate?'checked':'')+'> Sin tomate</label>';
+      if(type==='hamburguesa'||type==='milanesa_con_queso'){
+        options+='<div style="margin-top:8px;font-size:11px;font-weight:900">Queso</div><label style="display:block;margin:5px 0;font-size:12px"><input type="radio" name="queso-'+i+'" data-opt="queso" data-value="none" data-i="'+i+'" '+(x.cheese==='none'?'checked':'')+'> Sin queso</label><label style="display:block;margin:5px 0;font-size:12px"><input type="radio" name="queso-'+i+'" data-opt="queso" data-value="cheddar" data-i="'+i+'" '+(x.cheese==='cheddar'?'checked':'')+'> Cheddar</label><label style="display:block;margin:5px 0;font-size:12px"><input type="radio" name="queso-'+i+'" data-opt="queso" data-value="provoleta" data-i="'+i+'" '+(x.cheese==='provoleta'?'checked':'')+'> Provoleta</label>';
+      }
+      options+='</div>';
+    }
     return '<div style="padding:10px 0;border-bottom:1px solid #2c2c2c"><div class="ac-row"><span style="font-weight:800">'+x.qty+' × '+x.name+(note?' <span class="ac-muted">('+note+')</span>':'')+'</span><span>'+money(x.qty*x.price)+' <button class="ac-btn ac-dark" data-i="'+i+'" data-d="-1">−</button><button class="ac-btn ac-dark" data-i="'+i+'" data-d="1">+</button></span></div>'+options+'</div>'
   }).join('');
   e.querySelectorAll('[data-i][data-d]').forEach(function(b){
@@ -231,7 +246,7 @@ function renderDraft(){
   });
   document.getElementById('ac-total').textContent=''
 }
-function createOrder(){if(!draft.length)return;var now=Date.now(),day=todayKey(),n=nextDailyNumber(day),id='o'+now+Math.random().toString(36).slice(2,7),lines=JSON.parse(JSON.stringify(draft));lines.forEach(function(x){x.note=burgerNote(x)});var order={id:id,number:n,day:day,lines:lines,total:sum(draft),status:'recibido',paid:false,source:'comandas',createdAt:now,updatedAt:now};db.orders.unshift(order);draft=[];save();importOrdersToCaja([order]);rememberAction({type:'create',id:id,label:'crear comanda #'+n});renderNew();renderOrders();renderUndo();sync();}
+function createOrder(){if(!draft.length)return;var now=Date.now(),day=todayKey(),n=nextDailyNumber(day),id='o'+now+Math.random().toString(36).slice(2,7),lines=JSON.parse(JSON.stringify(draft));lines.forEach(function(x){x.note=customizationNote(x)});var order={id:id,number:n,day:day,lines:lines,total:sum(draft),status:'recibido',paid:false,source:'comandas',createdAt:now,updatedAt:now};db.orders.unshift(order);draft=[];save();importOrdersToCaja([order]);rememberAction({type:'create',id:id,label:'crear comanda #'+n});renderNew();renderOrders();renderUndo();sync();}
 function todayKey(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function nextDailyNumber(day){var nums=db.orders.filter(function(o){return String(o.day||'')===day}).map(function(o){return Number(o.number)||0});return (nums.length?Math.max.apply(null,nums):0)+1}
 function label(s){return{recibido:'Recibido',preparando:'En preparación',entregada:'Entregado'}[s]||'Pendiente'}

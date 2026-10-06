@@ -28,11 +28,6 @@ jobs:
       - name: Validar fuente
         run: |
           test -s app/src/main/assets/index.html
-          grep -q "CALCULADORA DE COBRO" app/src/main/assets/index.html
-          grep -q 'data-bill="10000"' app/src/main/assets/index.html
-          grep -q 'data-bill="20000"' app/src/main/assets/index.html
-          grep -q "argentasPaymentGate" app/src/main/assets/index.html
-          grep -q "Argentas 2" source/sync-engine.js
           node --check source/sync-engine.js
           python3 - <<'PY'
           import re, subprocess

@@ -190,11 +190,11 @@ function normProductName(n){return String(n||'').toLowerCase().normalize('NFD').
 function customizationType(x){
   var n=normProductName(x&&x.name);
   if(/pancho|panchos|hot ?dog/.test(n))return null;
-  if(/hamburguesa|burger/.test(n))return 'hamburguesa';
   if(/milanesa|milacombo|mila\\b/.test(n)){
     if(/con queso|conqueso/.test(n))return 'milanesa_con_queso';
     return 'milanesa_sin_queso';
   }
+  if(/hamburguesa|burger|combo ganador|ganador/.test(n))return 'hamburguesa';
   return null;
 }
 function customizationNote(x){

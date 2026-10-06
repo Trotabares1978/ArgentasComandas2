@@ -28,6 +28,18 @@ jobs:
       - name: Prepare Argentas
         run: python3 scripts/prepare_argentas.py
 
+      - name: Prepare icon
+        run: |
+          ICON="app/src/main/res/drawable/argentas_icon.png"
+          if command -v magick >/dev/null 2>&1; then
+            magick "$ICON" -fuzz 8% -transparent "#ff00ff" -trim +repage -resize 512x512 "$ICON"
+          elif command -v convert >/dev/null 2>&1; then
+            convert "$ICON" -fuzz 8% -transparent "#ff00ff" -trim +repage -resize 512x512 "$ICON"
+          else
+            echo "ImageMagick no está disponible"
+            exit 1
+          fi
+
       - name: Validate source
         run: |
           test -s app/src/main/assets/index.html

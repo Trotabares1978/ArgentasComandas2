@@ -186,15 +186,17 @@ function mergeProductsIntoArgentas(remote){
   }catch(e){console.warn('No se pudieron devolver productos a Argentas',e);return false}
 }
 function renderNew(){document.getElementById('ac-num').textContent='#'+nextDailyNumber(todayKey());document.getElementById('ac-grid').innerHTML=db.products.filter(function(x){return x.active!==false}).map(function(x){return '<button class="ac-prod" data-p="'+x.id+'"><b>'+x.name+'</b><span>'+money(x.price)+'</span></button>'}).join('');document.querySelectorAll('#ac-grid [data-p]').forEach(function(b){b.onclick=function(){add(b.getAttribute('data-p'))}});renderDraft()}
-function normProductName(n){return String(n||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/\\s+/g,' ').trim()}
+function normProductName(n){return String(n||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim()}
 function customizationType(x){
   var n=normProductName(x&&x.name);
   if(/pancho|panchos|hot ?dog/.test(n))return null;
-  if(/milanesa|milacombo|mila\\b/.test(n)){
+  if(/milanesa|milacombo|mila\b/.test(n)){
     if(/con queso|conqueso/.test(n))return 'milanesa_con_queso';
     return 'milanesa_sin_queso';
   }
-  if(/hamburguesa|burger|combo ganador|ganador/.test(n))return 'hamburguesa';
+  // Las hamburguesas simples/dobles/triples y sus combos pueden venir
+  // con nombres comerciales que no contienen la palabra "hamburguesa".
+  if(/hamburguesa|burger|combo ganador|ganador|simple|doble|triple/.test(n))return 'hamburguesa';
   return null;
 }
 function customizationNote(x){

@@ -16,7 +16,8 @@
         android:allowBackup="true"
         android:label="Argentas"
         android:supportsRtl="true"
-        android:icon="@drawable/argentas_icon"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@style/Theme.ArgentasComandas">
         <service
             android:name=".ArgentasConnectionService"

@@ -7,6 +7,8 @@ Versión Android de Argentas que conserva la aplicación original y suma un mód
 - La misma APK se adapta a celular y tablet Android.
 - Sincronización bidireccional directa entre los dos equipos mediante Wi-Fi Direct + TCP.
 - Ambos equipos ejecutan la misma aplicación y pueden enviar y recibir información.
+- El transporte Wi-Fi Direct/TCP vive en un servicio foreground persistente, separado de la Activity, para que la conexión pueda sobrevivir a la recreación o cierre de la interfaz.
+- Ante una pérdida del enlace, el servicio conserva el último dispositivo conocido y busca automáticamente la reconexión cuando vuelve a estar disponible.
 - La sincronización usa mensajes persistentes, confirmación (ACK), reintentos y deduplicación para evitar perder cambios cuando la conexión se corta.
 - Las comandas recibidas se incorporan a las ventas de la caja diaria una sola vez y, al cobrar, registran efectivo o transferencia.
 - La fuente original se reconstruye automáticamente durante el build desde `source/argentas-original-*.part`.

@@ -227,7 +227,7 @@ var customizationPendingProduct=null;
 function closeCustomization(){var m=document.getElementById('ac-custom-modal');if(m)m.style.display='none';customizationPendingProduct=null}
 function addConfiguredProduct(x,noLechuga,noTomate,cheese){
   var line={productId:x.id,name:x.name,price:x.price,qty:1,noLechuga:!!noLechuga,noTomate:!!noTomate,cheese:cheese||null};
-  var same=draft.find(function(y){return y.productId===line.productId&&!!y.noLechuga===line.noLechuga&&!!y.noTomate===line.noTomate&&(y.cheese||null)===(line.cheese||null)});
+  var same=draft.find(function(y){return y.productId===line.productId&&Number(y.price)===Number(line.price)&&!!y.noLechuga===line.noLechuga&&!!y.noTomate===line.noTomate&&(y.cheese||null)===(line.cheese||null)});
   if(same)same.qty++;else draft.push(line);
   renderDraft();
 }

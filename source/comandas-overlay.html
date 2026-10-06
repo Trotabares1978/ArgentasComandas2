@@ -190,8 +190,8 @@ function normProductName(n){return String(n||'').toLowerCase().normalize('NFD').
 function customizationType(x){
   var n=normProductName(x&&x.name);
   if(/hamburguesa|burger/.test(n))return 'hamburguesa';
-  if(/milanesa/.test(n)&&/sin queso/.test(n))return 'milanesa_sin_queso';
   if(/milanesa/.test(n)&&/con queso/.test(n))return 'milanesa_con_queso';
+  if(/milanesa/.test(n))return 'milanesa_sin_queso';
   return null;
 }
 function customizationNote(x){
@@ -225,8 +225,10 @@ function renderDraft(){
     if(type){
       var title=type==='hamburguesa'?'PERSONALIZAR HAMBURGUESA':(type==='milanesa_con_queso'?'PERSONALIZAR MILANESA CON QUESO':'PERSONALIZAR MILANESA');
       options='<div style="margin-top:8px;padding:9px 10px;border:1px solid #333;border-radius:10px;background:#111"><div style="font-size:10px;font-weight:1000;letter-spacing:.08em;color:#E8B84A;margin-bottom:7px">'+title+'</div><label style="display:block;margin:6px 0;font-size:12px"><input type="checkbox" data-opt="lechuga" data-i="'+i+'" '+(x.noLechuga?'checked':'')+'> Sin lechuga</label><label style="display:block;margin:6px 0;font-size:12px"><input type="checkbox" data-opt="tomate" data-i="'+i+'" '+(x.noTomate?'checked':'')+'> Sin tomate</label>';
-      if(type==='hamburguesa'||type==='milanesa_con_queso'){
+      if(type==='hamburguesa'){
         options+='<div style="margin-top:8px;font-size:11px;font-weight:900">Queso</div><label style="display:block;margin:5px 0;font-size:12px"><input type="radio" name="queso-'+i+'" data-opt="queso" data-value="none" data-i="'+i+'" '+(x.cheese==='none'?'checked':'')+'> Sin queso</label><label style="display:block;margin:5px 0;font-size:12px"><input type="radio" name="queso-'+i+'" data-opt="queso" data-value="cheddar" data-i="'+i+'" '+(x.cheese==='cheddar'?'checked':'')+'> Cheddar</label><label style="display:block;margin:5px 0;font-size:12px"><input type="radio" name="queso-'+i+'" data-opt="queso" data-value="provoleta" data-i="'+i+'" '+(x.cheese==='provoleta'?'checked':'')+'> Provoleta</label>';
+      } else if(type==='milanesa_con_queso'){
+        options+='<div style="margin-top:8px;font-size:11px;font-weight:900">Queso</div><label style="display:block;margin:5px 0;font-size:12px"><input type="radio" name="queso-'+i+'" data-opt="queso" data-value="cheddar" data-i="'+i+'" '+(x.cheese==='cheddar'?'checked':'')+'> Cheddar</label><label style="display:block;margin:5px 0;font-size:12px"><input type="radio" name="queso-'+i+'" data-opt="queso" data-value="provoleta" data-i="'+i+'" '+(x.cheese==='provoleta'?'checked':'')+'> Provoleta</label>';
       }
       options+='</div>';
     }

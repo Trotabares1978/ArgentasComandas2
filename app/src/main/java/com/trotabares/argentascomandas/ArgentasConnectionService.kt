@@ -88,6 +88,8 @@ class ArgentasConnectionService : Service() {
     private val serviceSeenAt = mutableMapOf<String, Long>()
     private var localService: WifiP2pDnsSdServiceInfo? = null
     private var serviceRequest: WifiP2pDnsSdServiceRequest? = null
+    @Volatile private var serviceReady = false
+    @Volatile private var peerDiscoveryRunning = false
 
     @Volatile private var socket: Socket? = null
     @Volatile private var server: ServerSocket? = null
@@ -152,17 +154,27 @@ class ArgentasConnectionService : Service() {
                         ) == WifiP2pManager.WIFI_P2P_STATE_ENABLED
 
                         if (!enabled) {
+                            serviceReady = false
+                            peerDiscoveryRunning = false
                             closeTransport()
                             state("ERROR", "Activá Wi-Fi para usar la conexión directa")
                         } else if (connected && socketIsAlive()) {
                             state("CONECTADO", "Conectado directamente con otro Argentas")
                         } else {
                             state("LISTO", "Wi-Fi Direct está disponible")
+                            serviceReady = false
                             scheduleReconnect(800)
                         }
                     }
 
                     WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION -> requestPeers()
+
+                    WifiP2pManager.WIFI_P2P_DISCOVERY_CHANGED_ACTION -> {
+                        peerDiscoveryRunning = intent.getIntExtra(
+                            WifiP2pManager.EXTRA_DISCOVERY_STATE,
+                            WifiP2pManager.WIFI_P2P_DISCOVERY_STOPPED
+                        ) == WifiP2pManager.WIFI_P2P_DISCOVERY_STARTED
+                    }
 
                     WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION -> requestConnectionInfo()
                 }
@@ -172,6 +184,7 @@ class ArgentasConnectionService : Service() {
         val filter = IntentFilter().apply {
             addAction(WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION)
             addAction(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION)
+            addAction(WifiP2pManager.WIFI_P2P_DISCOVERY_CHANGED_ACTION)
             addAction(WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION)
         }
 
@@ -202,6 +215,8 @@ class ArgentasConnectionService : Service() {
             object : WifiP2pManager.ChannelListener {
                 override fun onChannelDisconnected() {
                     channel = null
+                    serviceReady = false
+                    peerDiscoveryRunning = false
                     closeTransport()
                     state("ERROR", "Wi-Fi Direct perdió el canal; reiniciando el enlace…")
                     reconnectScheduled = false
@@ -354,6 +369,7 @@ class ArgentasConnectionService : Service() {
     ) {
         manager.addServiceRequest(ch, request, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
+                serviceReady = true
                 startPeerDiscovery(manager, ch)
                 discoverServices(manager, ch)
             }
@@ -370,16 +386,21 @@ class ArgentasConnectionService : Service() {
         manager: WifiP2pManager,
         ch: WifiP2pManager.Channel
     ) {
-        if (!wifiEnabled() || !locationModeEnabled()) return
+        if (!wifiEnabled() || !locationModeEnabled() || peerDiscoveryRunning) return
         manager.discoverPeers(ch, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
+                peerDiscoveryRunning = true
                 // Peer discovery is only a transport-level fallback/candidate scan.
                 // The UI still shows only DNS-SD Argentas services.
             }
             override fun onFailure(reason: Int) {
                 if (reason == WifiP2pManager.BUSY) {
-                    scheduleReconnect(1200)
+                    // BUSY commonly means discovery is already active; let the
+                    // framework broadcast keep the running flag authoritative.
+                    return
                 }
+                peerDiscoveryRunning = false
+                scheduleReconnect(1500)
             }
         })
     }
@@ -428,7 +449,12 @@ class ArgentasConnectionService : Service() {
             scheduleReconnect(500)
             return
         }
-        setupServiceDiscovery()
+        if (!serviceReady) {
+            setupServiceDiscovery()
+        } else {
+            startPeerDiscovery(manager, channel!!)
+            discoverServices(manager, channel!!)
+        }
     }
 
     private fun publishDevices() {

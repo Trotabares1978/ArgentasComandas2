@@ -1,0 +1,38 @@
+<script>
+(function(){
+'use strict';
+if(window.__ARGENTAS_SUPABASE_TRANSPORT__)return;
+window.__ARGENTAS_SUPABASE_TRANSPORT__=true;
+var SUPABASE_URL='https://blnoenkmshrybsqpsvtx.supabase.co';
+var SUPABASE_KEY='sb_publishable_OmZ_iwMzQNUDeyTJXOjBqw_au5UgLN8';
+var SUPABASE_TABLE='argentas_conexion';
+var DEVICE_ID=localStorage.getItem('argentas_supabase_device_id')||('d_'+Date.now()+'_'+Math.random().toString(36).slice(2,10));
+var DEVICE_ROLE=window.innerWidth>=600?'tablet':'celular';
+localStorage.setItem('argentas_supabase_device_id',DEVICE_ID);
+var ws=null,joined=false,reconnectTimer=null,heartbeatTimer=null,closing=false;
+function state(s,m){try{window.argentasConnectionState=s}catch(e){}try{if(typeof window.onBluetoothState==='function')window.onBluetoothState(s,m||'')}catch(e){}}
+function message(m){try{if(typeof window.onBluetoothMessage==='function')window.onBluetoothMessage(String(m||''))}catch(e){console.warn('Argentas Supabase message error',e)}}
+async function postMessage(raw){
+var res=await fetch(SUPABASE_URL+'/rest/v1/'+SUPABASE_TABLE,{method:'POST',headers:{'apikey':SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({dispositivo:DEVICE_ROLE,mensaje:String(raw)})});
+if(!res.ok)throw new Error('HTTP '+res.status);
+}
+function stopHeartbeat(){if(heartbeatTimer){clearInterval(heartbeatTimer);heartbeatTimer=null}}
+function schedule(){if(closing||reconnectTimer)return;reconnectTimer=setTimeout(function(){reconnectTimer=null;connect()},3000)}
+function connect(){
+closing=false;if(ws){try{ws.close()}catch(e){}ws=null}joined=false;stopHeartbeat();state('CONECTANDO','Conectando con Supabase…');
+var url=SUPABASE_URL.replace(/^https:/,'wss:')+'/realtime/v1/websocket?apikey='+encodeURIComponent(SUPABASE_KEY)+'&vsn=1.0.0';
+try{ws=new WebSocket(url)}catch(e){state('DESCONECTADO','No se pudo abrir Supabase');schedule();return}
+ws.onopen=function(){ws.send(JSON.stringify({topic:'realtime:argentas-conexion',event:'phx_join',payload:{config:{broadcast:{ack:false,self:false},presence:{enabled:false},postgres_changes:[{event:'INSERT',schema:'public',table:SUPABASE_TABLE}]},user_token:SUPABASE_KEY},ref:'1',join_ref:'1'}))};
+ws.onmessage=function(ev){try{var m=JSON.parse(ev.data);
+if(m.event==='phx_reply'&&m.payload&&m.payload.status==='ok'){joined=true;state('CONECTADO','Conectado a Supabase · '+DEVICE_ROLE);stopHeartbeat();heartbeatTimer=setInterval(function(){if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({topic:'phoenix',event:'heartbeat',payload:{},ref:String(Date.now())}))},25000);return}
+if(m.event==='system'&&m.payload&&m.payload.status==='ok'){joined=true;state('CONECTADO','Conectado a Supabase · '+DEVICE_ROLE);return}
+if(m.event==='postgres_changes'&&m.payload&&m.payload.data&&m.payload.data.record){var row=m.payload.data.record;if(row.dispositivo!==DEVICE_ROLE&&row.mensaje)message(row.mensaje)}
+}catch(e){}};
+ws.onerror=function(){state('DESCONECTADO','Error de conexión con Supabase')};
+ws.onclose=function(){joined=false;stopHeartbeat();if(!closing){state('CONECTANDO','Reconectando con Supabase…');schedule()}};
+}
+window.ArgentasNativeBluetooth={startServer:connect,refresh:connect,connect:connect,acceptIncoming:connect,rejectIncoming:function(){},send:function(raw){if(!raw)return;postMessage(String(raw)).catch(function(e){console.warn('Argentas Supabase send error',e);state('CONECTADO','Conectado · envío pendiente')})}};
+window.ArgentasBluetooth={startServer:connect,refresh:connect,connect:connect,acceptIncoming:connect,rejectIncoming:function(){},send:function(raw){window.ArgentasNativeBluetooth.send(raw)}};
+setTimeout(connect,50);
+})();
+</script>

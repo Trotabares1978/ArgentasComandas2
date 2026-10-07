@@ -1,5 +1,7 @@
 package com.trotabares.argentascomandas
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.os.Bundle
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
@@ -56,7 +58,7 @@ class MainActivity : AppCompatActivity() {
                         Thread.sleep(1500)
                         continue
                     }
-                    dispatchState("CONECTANDO", "Conectando con ArgentasLink…")
+                    dispatchState("CONECTANDO", "Buscando el puente local de ArgentasLink…")
                     val s = Socket()
                     s.tcpNoDelay = true
                     s.keepAlive = true
@@ -70,7 +72,7 @@ class MainActivity : AppCompatActivity() {
                     while (running && bridgeSocket === s && !s.isClosed) Thread.sleep(1000)
                 } catch (_: Exception) {
                     closeBridge()
-                    dispatchState("DESCONECTADO", "ArgentasLink no está disponible")
+                    dispatchState("DESCONECTADO", "ArgentasLink no está abierto. Tocá REINTENTAR para abrirlo.")
                     Thread.sleep(1500)
                 }
             }
@@ -114,6 +116,28 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun openArgentasLink() {
+        try {
+            val launch = packageManager.getLaunchIntentForPackage("com.trotabares.argentaslink")
+            if (launch != null) {
+                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(launch)
+                dispatchState("CONECTANDO", "Abriendo ArgentasLink…")
+            } else {
+                dispatchState("DESCONECTADO", "ArgentasLink no está instalado en este equipo")
+            }
+        } catch (_: ActivityNotFoundException) {
+            dispatchState("DESCONECTADO", "No se pudo abrir ArgentasLink")
+        }
+    }
+
+    private fun reconnectAndOpenArgentasLink() {
+        closeBridge()
+        dispatchState("CONECTANDO", "Abriendo ArgentasLink y conectando…")
+        openArgentasLink()
+        connectToArgentasLink()
+    }
+
     private fun closeBridge() {
         try { bridgeSocket?.close() } catch (_: Exception) {}
         bridgeSocket = null
@@ -154,12 +178,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     inner class NativeBluetoothBridge {
-        @JavascriptInterface fun refresh() = connectToArgentasLink()
-        @JavascriptInterface fun startNearby() = connectToArgentasLink()
+        @JavascriptInterface fun refresh() = reconnectAndOpenArgentasLink()
+        @JavascriptInterface fun startNearby() = reconnectAndOpenArgentasLink()
         @JavascriptInterface fun stopNearby() {}
-        @JavascriptInterface fun startServer() = connectToArgentasLink()
-        @JavascriptInterface fun connect(address: String) = connectToArgentasLink()
-        @JavascriptInterface fun acceptIncoming() = connectToArgentasLink()
+        @JavascriptInterface fun startServer() = reconnectAndOpenArgentasLink()
+        @JavascriptInterface fun connect(address: String) = reconnectAndOpenArgentasLink()
+        @JavascriptInterface fun acceptIncoming() = reconnectAndOpenArgentasLink()
         @JavascriptInterface fun rejectIncoming() {}
         @JavascriptInterface fun send(message: String) = sendRawLocal("APP|$message")
     }

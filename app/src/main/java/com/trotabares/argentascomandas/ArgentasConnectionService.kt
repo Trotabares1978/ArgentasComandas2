@@ -719,7 +719,7 @@ class ArgentasConnectionService : Service() {
         if (!connected || s.isClosed) return
         writer.execute {
             try {
-                val clean = message.replace("\\r", "").replace("\\n", "") + "\\n"
+                val clean = message.replace("\r", "").replace("\n", "") + "\n"
                 val out = s.getOutputStream()
                 synchronized(out) {
                     out.write(clean.toByteArray(Charsets.UTF_8))

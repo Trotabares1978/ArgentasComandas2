@@ -222,8 +222,17 @@ class ArgentasConnectionService : Service() {
 
         val serviceListener = WifiP2pManager.DnsSdServiceResponseListener {
                 _, registrationType, device ->
-            if (registrationType == "_argentas._tcp") {
-                serviceAddresses.add(device.deviceAddress)
+            if (registrationType != "_argentas._tcp") return@DnsSdServiceResponseListener
+            val address = device.deviceAddress
+            if (address.isNullOrBlank()) return@DnsSdServiceResponseListener
+            val name = device.deviceName.takeIf { it.isNotBlank() } ?: "Argentas"
+            serviceAddresses.add(address)
+            serviceDevices[address] = name
+            devices[address] = name
+            publishDevices()
+            val last = prefs.getString(LAST_PEER_KEY, null)
+            if (!connected && !groupFormed && address == last) {
+                connectP2P(address, automatic = true)
             }
         }
 
@@ -388,6 +397,26 @@ class ArgentasConnectionService : Service() {
     }
 
     @SuppressLint("MissingPermission")
+    private fun rememberPeerFromGroup(
+        manager: WifiP2pManager,
+        ch: WifiP2pManager.Channel
+    ) {
+        try {
+            manager.requestGroupInfo(ch) { group ->
+                val peer = if (group.isGroupOwner) {
+                    group.clientList.firstOrNull()
+                } else {
+                    group.owner
+                }
+                val address = peer?.deviceAddress
+                if (!address.isNullOrBlank()) {
+                    prefs.edit().putString(LAST_PEER_KEY, address).apply()
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    @SuppressLint("MissingPermission")
     private fun requestConnectionInfo() {
         val manager = p2p ?: return
         val ch = channel ?: return
@@ -408,6 +437,7 @@ class ArgentasConnectionService : Service() {
             }
 
             groupFormed = true
+            rememberPeerFromGroup(manager, ch)
 
             if (connected && socketIsAlive()) {
                 state("CONECTADO", "Conectado directamente con otro Argentas")
@@ -473,7 +503,8 @@ class ArgentasConnectionService : Service() {
                     try {
                         val s = Socket()
                         s.tcpNoDelay = true
-                        s.connect(InetSocketAddress(address, WIFI_PORT), 900)
+                        s.keepAlive = true
+                        s.connect(InetSocketAddress(address, WIFI_PORT), 1500)
                         attachSocket(s)
                         established = true
                     } catch (_: Exception) {
@@ -500,7 +531,10 @@ class ArgentasConnectionService : Service() {
             return
         }
 
-        try { s.tcpNoDelay = true } catch (_: Exception) {}
+        try {
+            s.tcpNoDelay = true
+            s.keepAlive = true
+        } catch (_: Exception) {}
         socket = s
         connected = true
         reconnectScheduled = false

@@ -449,7 +449,7 @@ class ArgentasLanConnectionService : Service() {
 
     private fun notification(): Notification =
         NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_wifi)
+            .setSmallIcon(android.R.drawable.sym_def_app_icon)
             .setContentTitle("Argentas")
             .setContentText("Conexión local entre los equipos")
             .setOngoing(true)

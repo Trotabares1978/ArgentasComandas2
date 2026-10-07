@@ -62,6 +62,8 @@ class ArgentasConnectionService : Service() {
         private const val SERVICE_STALE_MS = 15000L
         private const val SERVICE_DISCOVERY_INTERVAL_MS = 15000L
         private const val HEARTBEAT_INTERVAL_MS = 3000L
+        private const val HEARTBEAT_TIMEOUT_MS = 10000L
+        private const val MAX_RECONNECT_DELAY_MS = 60000L
         private const val SOCKET_READ_TIMEOUT_MS = 10000
         private const val PREFS = "argentas_p2p"
         private const val LAST_PEER_KEY = "last_peer_address"
@@ -105,6 +107,8 @@ class ArgentasConnectionService : Service() {
     private var discoveryFuture: ScheduledFuture<*>? = null
     private var heartbeatFuture: ScheduledFuture<*>? = null
     @Volatile private var authorized = false
+    @Volatile private var lastHeartbeatAckAt = 0L
+    @Volatile private var reconnectAttempt = 0
     @Volatile private var currentState = "DESCONECTADO"
     @Volatile private var currentText = "Conexión directa no iniciada"
 
@@ -686,6 +690,7 @@ class ArgentasConnectionService : Service() {
         socket = s
         connected = true
         authorized = false
+        lastHeartbeatAckAt = System.currentTimeMillis()
         reconnectScheduled = false
         state("CONECTANDO", "Canal Wi-Fi Direct creado; verificando Argentas…")
         sendTransportHello()

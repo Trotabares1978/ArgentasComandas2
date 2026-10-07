@@ -94,7 +94,7 @@ window.argentasCustomizeProduct=function(product,onAdd){
     var cheese='';var q=m.querySelector('input[name="av-cheese"]:checked');if(q)cheese=q.value;
     var parts=[];if(m.querySelector('#av-no-lechuga').checked)parts.push('sin lechuga');if(m.querySelector('#av-no-tomate').checked)parts.push('sin tomate');
     if(cheese==='provoleta')parts.push('Provoleta');else if(cheese==='cheddar')parts.push('Cheddar');else if(cheese==='none')parts.push('sin queso');
-    if(cheeseRequired&&!cheese)cheese='cheddar';if(cheeseRequired&&parts.indexOf('Cheddar')<0&&parts.indexOf('Provoleta')<0)parts.push(cheese==='provoleta'?'Provoleta':'Cheddar');var custom={noLechuga:m.querySelector('#av-no-lechuga').checked,noTomate:m.querySelector('#av-no-tomate').checked,cheese:cheese,note:parts.length?'('+parts.join(' · ')+')':'',key:JSON.stringify({noLechuga:m.querySelector('#av-no-lechuga').checked,noTomate:m.querySelector('#av-no-tomate').checked,cheese:cheese})};
+    if(hasCheese&&!cheese){alert('⚠️ SELECCIONÁ UN QUESO');return}var custom={noLechuga:m.querySelector('#av-no-lechuga').checked,noTomate:m.querySelector('#av-no-tomate').checked,cheese:cheese,note:parts.length?'('+parts.join(' · ')+')':'',key:JSON.stringify({noLechuga:m.querySelector('#av-no-lechuga').checked,noTomate:m.querySelector('#av-no-tomate').checked,cheese:cheese})};
     close();onAdd(custom);
   };
   return true;

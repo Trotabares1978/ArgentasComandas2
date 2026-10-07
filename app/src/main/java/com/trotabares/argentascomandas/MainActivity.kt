@@ -26,6 +26,7 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var bridgeOut: OutputStream? = null
     @Volatile private var running = true
     @Volatile private var bridgeConnectorStarted = false
+    @Volatile private var remoteLinkConnected = false
 
     companion object {
         private const val BRIDGE_HOST = "127.0.0.1"
@@ -58,7 +59,7 @@ class MainActivity : AppCompatActivity() {
             while (running) {
                 try {
                     if (bridgeSocket?.isConnected == true && bridgeSocket?.isClosed == false) {
-                        dispatchState("CONECTADO", "ArgentasLink disponible")
+                        dispatchState(if (remoteLinkConnected) "CONECTADO" else "CONECTANDO", if (remoteLinkConnected) "ArgentasLink conectado con el otro equipo" else "Puente local conectado; esperando ArgentasLink…")
                         Thread.sleep(1500)
                         continue
                     }
@@ -71,7 +72,7 @@ class MainActivity : AppCompatActivity() {
                         bridgeSocket = s
                         bridgeOut = s.getOutputStream()
                     }
-                    dispatchState("CONECTADO", "ArgentasLink disponible")
+                    dispatchState("CONECTANDO", "Puente local conectado; verificando el otro equipo…")
                     io.execute { readBridge(s) }
                     while (running && bridgeSocket === s && !s.isClosed) Thread.sleep(1000)
                 } catch (_: Exception) {
@@ -92,8 +93,13 @@ class MainActivity : AppCompatActivity() {
                     line.startsWith("APP|") -> dispatchMessage(line.substring(4))
                     line.startsWith("LINK_STATE|") -> {
                         val state = line.substringAfter("LINK_STATE|")
-                        if (state == "CONECTADO") dispatchState("CONECTADO", "ArgentasLink conectado con el otro equipo")
-                        else dispatchState("DESCONECTADO", "ArgentasLink esperando al otro equipo")
+                        if (state == "CONECTADO") {
+                            remoteLinkConnected = true
+                            dispatchState("CONECTADO", "ArgentasLink conectado con el otro equipo")
+                        } else {
+                            remoteLinkConnected = false
+                            dispatchState("CONECTANDO", "ArgentasLink esperando al otro equipo")
+                        }
                     }
                 }
             }
@@ -142,6 +148,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun closeBridge() {
+        remoteLinkConnected = false
         try { bridgeSocket?.close() } catch (_: Exception) {}
         bridgeSocket = null
         bridgeOut = null

@@ -65,6 +65,9 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= 33) {
             list += Manifest.permission.NEARBY_WIFI_DEVICES
             list += Manifest.permission.ACCESS_FINE_LOCATION
+            list += Manifest.permission.BLUETOOTH_ADVERTISE
+            list += Manifest.permission.BLUETOOTH_CONNECT
+            list += Manifest.permission.BLUETOOTH_SCAN
             list += Manifest.permission.POST_NOTIFICATIONS
         } else {
             list += Manifest.permission.ACCESS_COARSE_LOCATION
@@ -189,6 +192,12 @@ class MainActivity : AppCompatActivity() {
     inner class NativeBluetoothBridge {
         @JavascriptInterface
         fun refresh() = sendCommand("refresh")
+
+        @JavascriptInterface
+        fun startNearby() = sendCommand("nearby_start")
+
+        @JavascriptInterface
+        fun stopNearby() = sendCommand("nearby_stop")
 
         @JavascriptInterface
         fun startServer() = sendCommand("start_server")

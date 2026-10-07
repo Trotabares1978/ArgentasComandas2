@@ -20,6 +20,7 @@ import android.net.wifi.p2p.WifiP2pInfo
 import android.net.wifi.p2p.WifiP2pManager
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.location.LocationManager
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
@@ -132,11 +133,14 @@ class ArgentasConnectionService : Service() {
     private var nearbyManager: ArgentasNearbyManager? = null
     private var nearbyFallbackFuture: ScheduledFuture<*>? = null
     private var nearbyFallbackScheduled = false
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onCreate() {
         super.onCreate()
         createChannel()
         startForeground(NOTIFICATION_ID, notification())
+        acquireConnectionWakeLock()
+        diagnostic("energia=PARTIAL_WAKE_LOCK; servicio de conexión protegido")
         registerP2P()
         nearbyManager = ArgentasNearbyManager(
             this,
@@ -171,6 +175,30 @@ class ArgentasConnectionService : Service() {
             },
             diagnostic = { msg -> diagnostic(msg) }
         )
+    }
+
+    private fun acquireConnectionWakeLock() {
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return
+            wakeLock = pm.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "Argentas::ConnectionService"
+            ).apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+        } catch (e: Exception) {
+            diagnostic("energia=WAKE_LOCK_FALLO;" + (e.message ?: e.javaClass.simpleName))
+        }
+    }
+
+    private fun releaseConnectionWakeLock() {
+        try {
+            wakeLock?.let { if (it.isHeld) it.release() }
+        } catch (_: Exception) {
+        } finally {
+            wakeLock = null
+        }
     }
 
     private fun hasPermission(): Boolean {
@@ -319,12 +347,12 @@ class ArgentasConnectionService : Service() {
         // camino directo, sin Internet, router ni hotspot.
         scheduleNearbyFallback(8000)
         if (isCajaRegistradora()) {
-            diagnostic("rol=caja; la tablet será Group Owner fijo")
+            diagnostic("rol=caja; la tablet será Group Owner fijo; descubrimiento=pasivo")
             discoveryFuture = reconnect.scheduleAtFixedRate({
                 if (!stopping && !connected) ensureCajaGroup()
             }, 300, DISCOVERY_INTERVAL_MS, TimeUnit.MILLISECONDS)
         } else {
-            diagnostic("rol=cocina; buscando únicamente la Caja Argentas")
+            diagnostic("rol=cocina; buscando únicamente la Caja Argentas; iniciador=activo")
             discoveryFuture = reconnect.scheduleAtFixedRate({
                 if (!stopping && !connected) {
                     if (groupFormed) {
@@ -877,7 +905,7 @@ class ArgentasConnectionService : Service() {
             }
 
             groupFormed = true
-            diagnostic("P2P=GRUPO_FORMADO; rol=" + deviceRole() + "; groupOwner=" + info.isGroupOwner)
+            diagnostic("P2P=GRUPO_FORMADO; rol=" + deviceRole() + "; groupOwner=" + info.isGroupOwner + "; GO_ADDRESS=" + (info.groupOwnerAddress?.hostAddress ?: "desconocida"))
             rememberPeerFromGroup(manager, ch)
 
             if (isCajaRegistradora() && !info.isGroupOwner) {
@@ -918,11 +946,13 @@ class ArgentasConnectionService : Service() {
                 ss.reuseAddress = true
                 ss.bind(InetSocketAddress(WIFI_PORT))
                 server = ss
+                diagnostic("tcp=SERVIDOR_OK; puerto=" + WIFI_PORT + "; rol=" + deviceRole())
                 state("CONECTANDO", "Enlace creado. Esperando al otro Argentas…")
 
                 while (!ss.isClosed && !stopping && epoch.get() == myEpoch) {
                     try {
                         val incoming = ss.accept()
+                        diagnostic("tcp=ENTRADA; remoto=" + (incoming.inetAddress?.hostAddress ?: "desconocido"))
                         if (connected) {
                             try { incoming.close() } catch (_: Exception) {}
                         } else {
@@ -964,7 +994,9 @@ class ArgentasConnectionService : Service() {
                         val s = Socket()
                         s.tcpNoDelay = true
                         s.keepAlive = true
+                        diagnostic("tcp=CONEXION; intento=" + attempt + "; destino=" + address.hostAddress + ":" + WIFI_PORT)
                         s.connect(InetSocketAddress(address, WIFI_PORT), 1500)
+                        diagnostic("tcp=CONEXION_OK; destino=" + address.hostAddress + ":" + WIFI_PORT)
                         attachSocket(s)
                         established = true
                     } catch (_: Exception) {
@@ -1300,6 +1332,7 @@ class ArgentasConnectionService : Service() {
         nearbyManager?.stop()
         nearbyManager = null
         stopping = true
+        releaseConnectionWakeLock()
         try { receiver?.let { unregisterReceiver(it) } } catch (_: Exception) {}
         closeTransport()
         discoveryFuture?.cancel(true)

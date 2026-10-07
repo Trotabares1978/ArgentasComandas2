@@ -859,7 +859,10 @@ class ArgentasConnectionService : Service() {
                         reconnectAttempt = 0
                         nearbyFallbackFuture?.cancel(false)
                         nearbyFallbackScheduled = false
-                        if (transport == Transport.WIFI_DIRECT) nearbyManager?.stop()
+                        if (transport == Transport.WIFI_DIRECT) {
+                            // Wi-Fi Direct is the active transport; Nearby is only fallback.
+                            nearbyManager?.stop()
+                        }
                         state("CONECTADO", if (transport == Transport.NEARBY)
                             "Conectado por Nearby con otro Argentas"
                         else
@@ -874,7 +877,10 @@ class ArgentasConnectionService : Service() {
                         reconnectAttempt = 0
                         nearbyFallbackFuture?.cancel(false)
                         nearbyFallbackScheduled = false
-                        if (transport == Transport.WIFI_DIRECT) nearbyManager?.stop()
+                        if (transport == Transport.WIFI_DIRECT) {
+                            // Wi-Fi Direct is the active transport; Nearby is only fallback.
+                            nearbyManager?.stop()
+                        }
                         state("CONECTADO", if (transport == Transport.NEARBY)
                             "Conectado por Nearby con otro Argentas"
                         else

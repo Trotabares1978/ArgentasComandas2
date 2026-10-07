@@ -1234,6 +1234,10 @@ class ArgentasConnectionService : Service() {
 
     private fun scheduleReconnect(delayMs: Long = 1500) {
         if (stopping || reconnectScheduled || connected) return
+        // Every lost Wi-Fi Direct session gets a fresh Nearby fallback window.
+        // This keeps the two direct transports complementary after a real drop,
+        // without changing the Comandas/data layer.
+        scheduleNearbyFallback(8000)
         reconnectScheduled = true
         val baseDelay = minOf(
             MAX_RECONNECT_DELAY_MS,

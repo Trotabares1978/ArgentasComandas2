@@ -754,24 +754,6 @@ class ArgentasConnectionService : Service() {
                 "; rol=" + deviceRole()
             )
             publishDevices()
-
-            // Fast path: si ya conocemos la Caja con la que se conectó este
-            // teléfono anteriormente, Wi-Fi Direct puede intentar la conexión
-            // apenas Android la vuelve a ver en la lista de peers, sin esperar
-            // a que termine DNS-SD/TXT. Si falla, el descubrimiento Argentas
-            // normal sigue funcionando como antes.
-            val preferred = prefs.getString(LAST_PEER_KEY, null)
-            if (
-                !isCajaRegistradora() &&
-                !connected &&
-                !groupFormed &&
-                !p2pConnectInProgress &&
-                !preferred.isNullOrBlank() &&
-                peers.any { it.deviceAddress == preferred }
-            ) {
-                diagnostic("fast_connect=PEER_RECORDADO_ENCONTRADO; iniciando conexión directa")
-                connectP2P(preferred, automatic = true)
-            }
         }
     }
 
@@ -834,16 +816,8 @@ class ArgentasConnectionService : Service() {
             diagnostic("connect=IGNORADO; la Caja nunca inicia conexiones")
             return
         }
-        if (address.isBlank() || connected) return
-
-        val preferred = prefs.getString(LAST_PEER_KEY, null)
-        val knownPreferredPeer = automatic && address == preferred
-
-        // En la ruta rápida usamos exclusivamente la dirección que Argentas
-        // guardó de la Caja anterior. La validación DNS-SD/TXT sigue siendo
-        // obligatoria para cualquier dispositivo nuevo o seleccionado a mano.
-        if (!serviceAddresses.contains(address) && !knownPreferredPeer) return
-        if (serviceDeviceIds[address].isNullOrBlank() && !knownPreferredPeer) return
+        if (address.isBlank() || connected || !serviceAddresses.contains(address)) return
+        if (serviceDeviceIds[address].isNullOrBlank()) return
         if (groupFormed) {
             diagnostic("connect=IGNORADO; ya existe un grupo P2P; esperando ConnectionInfo")
             requestConnectionInfo()

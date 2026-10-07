@@ -63,6 +63,7 @@ class ArgentasConnectionService : Service() {
         private const val SERVICE_DISCOVERY_INTERVAL_MS = 15000L
         private const val HEARTBEAT_INTERVAL_MS = 3000L
         private const val HEARTBEAT_TIMEOUT_MS = 10000L
+        private const val HEARTBEAT_TIMEOUT_MS = 10000L
         private const val MAX_RECONNECT_DELAY_MS = 60000L
         private const val SOCKET_READ_TIMEOUT_MS = 10000
         private const val PREFS = "argentas_p2p"
@@ -124,7 +125,11 @@ class ArgentasConnectionService : Service() {
             ActivityCompat.checkSelfPermission(
                 this,
                 Manifest.permission.NEARBY_WIFI_DEVICES
-            ) == PackageManager.PERMISSION_GRANTED
+            ) == PackageManager.PERMISSION_GRANTED ||
+                ActivityCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.ACCESS_FINE_LOCATION
+                ) == PackageManager.PERMISSION_GRANTED
         } else {
             ActivityCompat.checkSelfPermission(
                 this,
@@ -609,8 +614,9 @@ class ArgentasConnectionService : Service() {
 
         io.execute {
             try {
-                val ss = ServerSocket(WIFI_PORT)
+                val ss = ServerSocket()
                 ss.reuseAddress = true
+                ss.bind(InetSocketAddress(WIFI_PORT))
                 server = ss
                 state("CONECTANDO", "Enlace creado. Esperando al otro Argentas…")
 
@@ -676,7 +682,8 @@ class ArgentasConnectionService : Service() {
                 tcpConnecting = false
             }
 
-            if (!established && !connected && !groupFormed && !stopping) {
+            if (!established && !connected && !stopping) {
+                diagnostic("tcp=FALLO; agotados 5 intentos; grupo=" + groupFormed)
                 scheduleReconnect(1000)
             }
         }
@@ -741,7 +748,7 @@ class ArgentasConnectionService : Service() {
                     state("DESCONECTADO", "El enlace dejó de responder; intentando reconectar…")
                     scheduleReconnect(500)
                 } else {
-                    sendTransportHello()
+                    sendRaw(JSONObject().put("type", "ping").put("ts", now).toString())
                 }
             }
         }, HEARTBEAT_INTERVAL_MS, HEARTBEAT_INTERVAL_MS, TimeUnit.MILLISECONDS)
@@ -762,7 +769,17 @@ class ArgentasConnectionService : Service() {
         try {
             val obj = JSONObject(line)
             when (obj.optString("type")) {
+                "ping" -> {
+                    lastHeartbeatAckAt = System.currentTimeMillis()
+                    sendRaw(JSONObject().put("type", "pong").put("ts", System.currentTimeMillis()).toString())
+                    return
+                }
+                "pong" -> {
+                    lastHeartbeatAckAt = System.currentTimeMillis()
+                    return
+                }
                 "hello" -> {
+                    lastHeartbeatAckAt = System.currentTimeMillis()
                     sendRaw(JSONObject().put("type", "hello-ack").put("ts", System.currentTimeMillis()).toString())
                     if (!authorized) {
                         authorized = true

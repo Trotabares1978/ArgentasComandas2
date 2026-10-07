@@ -500,22 +500,26 @@ class ArgentasConnectionService : Service() {
         }
 
         val serviceListener = WifiP2pManager.DnsSdServiceResponseListener {
-                _, registrationType, device ->
+                instanceName, registrationType, device ->
             if (registrationType != "_argentas._tcp") return@DnsSdServiceResponseListener
             val address = device.deviceAddress
             if (address.isNullOrBlank()) return@DnsSdServiceResponseListener
             if (address == "02:00:00:00:00:00") return@DnsSdServiceResponseListener
+            diagnostic(
+                "DNS_SD_SERVICIO; instancia=" + instanceName +
+                    "; dispositivo=" + (device.deviceName.takeIf { it.isNotBlank() } ?: "sin nombre") +
+                    "; direccion=" + address
+            )
             serviceSeenAt[address] = System.currentTimeMillis()
             val name = device.deviceName.takeIf { it.isNotBlank() } ?: "Argentas"
             serviceAddresses.add(address)
             serviceDevices[address] = name
             devices[address] = name
             publishDevices()
-            val last = prefs.getString(LAST_PEER_KEY, null)
             if (!connected && !groupFormed && serviceDeviceIds[address].isNullOrBlank()) {
-                // Si llega la respuesta de servicio antes que el TXT, todavía
-                // esperamos el TXT para validar app/rol antes de conectar.
-                diagnostic("servicio_argentas_detectado; esperando TXT para validar Caja")
+                // La respuesta de servicio llegó pero todavía no tenemos el TXT.
+                // Esperamos el TXT para validar app=argentas y role=caja.
+                diagnostic("DNS_SD_TXT_PENDIENTE; esperando datos de la Caja")
             }
         }
 
@@ -579,7 +583,11 @@ class ArgentasConnectionService : Service() {
         manager: WifiP2pManager,
         ch: WifiP2pManager.Channel
     ) {
-        val request = WifiP2pDnsSdServiceRequest.newInstance("_argentas._tcp")
+        // Igual que el ejemplo oficial de Android: pedir descubrimiento Bonjour
+        // general y filtrar _argentas._tcp en DnsSdServiceResponseListener.
+        // Esto evita que algunos fabricantes rechacen un ServiceRequest
+        // demasiado específico.
+        val request = WifiP2pDnsSdServiceRequest.newInstance()
         serviceRequest = request
         manager.clearServiceRequests(ch, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
@@ -600,7 +608,7 @@ class ArgentasConnectionService : Service() {
         manager.addServiceRequest(ch, request, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
                 serviceReady = true
-                diagnostic("addServiceRequest=OK; servicio=_argentas._tcp")
+                diagnostic("addServiceRequest=OK; solicitud DNS-SD general; filtro=_argentas._tcp")
                 startPeerDiscovery(manager, ch)
                 discoverServices(manager, ch)
             }

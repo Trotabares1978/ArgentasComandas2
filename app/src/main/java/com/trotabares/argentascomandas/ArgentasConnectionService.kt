@@ -314,6 +314,10 @@ class ArgentasConnectionService : Service() {
 
     private fun startDiscoveryLoop() {
         discoveryFuture?.cancel(false)
+        // Wi-Fi Direct sigue siendo el primer camino. Si el fabricante no
+        // entrega DNS-SD, Nearby P2P entra automáticamente como segundo
+        // camino directo, sin Internet, router ni hotspot.
+        scheduleNearbyFallback(8000)
         if (isCajaRegistradora()) {
             diagnostic("rol=caja; la tablet será Group Owner fijo")
             discoveryFuture = reconnect.scheduleAtFixedRate({

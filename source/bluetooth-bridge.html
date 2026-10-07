@@ -1,7 +1,21 @@
 <script>
 (function(){
 if(window.__ARGENTAS_BT_INSTALLED__)return;window.__ARGENTAS_BT_INSTALLED__=true;
-function post(type,payload){try{window.dispatchEvent(new CustomEvent('argentas-bluetooth',{detail:{type:type,payload:payload}}));}catch(e){}}
+function post(type,payload){try{window.dispatchEvent(new CustomEvent('argentas-bluetooth',{detail:{type:type,payload:payload}}));}catch(e){}}function syncHeaderConnectionBadge(state){
+ var wanted=state==='CONECTADO'?'CONECTADO':(state==='CONECTANDO'?'CONECTANDO…':'DESCONECTADO');
+ try{
+   document.querySelectorAll('body *').forEach(function(el){
+     if(el.children.length===0){
+       var t=(el.textContent||'').trim();
+       if(t==='DESCONECTADO'||t==='CONECTADO'||t==='CONECTANDO…'){
+         el.textContent=wanted;
+         el.style.color=state==='CONECTADO'?'#42D96B':(state==='CONECTANDO'?'#F5B83D':'#F06A6A');
+       }
+     }
+   });
+ }catch(e){}
+}
+
 window.onBluetoothState=function(s,m){post('state',{state:s,message:m||''});};
 window.onBluetoothMessage=function(m){post('message',{message:String(m||'')});};
 window.ArgentasBluetooth={
@@ -16,7 +30,7 @@ window.addEventListener('argentas-bluetooth',function(e){
  var d=e.detail||{},p=d.payload||{};
  if(d.type==='state'){
    var s=document.getElementById('argentas-bt-status');
-   if(s)s.textContent=p.state+(p.message?' — '+p.message:'');
+   if(s)s.textContent=p.state+(p.message?' — '+p.message:''); syncHeaderConnectionBadge(p.state);
    var rb=document.getElementById('argentas-link-retry');
    if(rb){
      if(p.state==='CONECTANDO'){

@@ -25,6 +25,7 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var bridgeSocket: Socket? = null
     @Volatile private var bridgeOut: OutputStream? = null
     @Volatile private var running = true
+    @Volatile private var bridgeConnectorStarted = false
 
     companion object {
         private const val BRIDGE_HOST = "127.0.0.1"
@@ -51,6 +52,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun connectToArgentasLink() {
+        if (bridgeConnectorStarted) return
+        bridgeConnectorStarted = true
         io.execute {
             while (running) {
                 try {
@@ -136,7 +139,6 @@ class MainActivity : AppCompatActivity() {
         closeBridge()
         dispatchState("CONECTANDO", "Abriendo ArgentasLink y conectando…")
         openArgentasLink()
-        connectToArgentasLink()
     }
 
     private fun closeBridge() {
@@ -191,6 +193,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         running = false
+        bridgeConnectorStarted = false
         closeBridge()
         io.shutdownNow()
         webViewReady = false

@@ -117,6 +117,8 @@ class ArgentasConnectionService : Service() {
     @Volatile private var server: ServerSocket? = null
     @Volatile private var connected = false
     @Volatile private var tcpConnecting = false
+    @Volatile private var p2pConnectInProgress = false
+    @Volatile private var groupCreateInProgress = false
     @Volatile private var groupFormed = false
     @Volatile private var stopping = false
     @Volatile private var reconnectScheduled = false
@@ -411,6 +413,10 @@ class ArgentasConnectionService : Service() {
         val manager = p2p ?: return
         val ch = channel ?: return
         if (!hasPermission() || !wifiEnabled() || !locationModeEnabled()) return
+        if (groupCreateInProgress) {
+            diagnostic("caja=createGroup=YA_EN_CURSO; no se duplica la negociación")
+            return
+        }
 
         manager.requestConnectionInfo(ch) { info ->
             if (info.groupFormed) {
@@ -444,30 +450,50 @@ class ArgentasConnectionService : Service() {
 
     @SuppressLint("MissingPermission")
     private fun scheduleCajaGroupCreate(delayMs: Long) {
-        if (stopping || !isCajaRegistradora()) return
+        if (stopping || !isCajaRegistradora() || groupCreateInProgress || groupFormed) return
+        groupCreateInProgress = true
+        diagnostic("caja=createGroup=PROGRAMADO; espera=" + delayMs + " ms")
         reconnect.schedule({
             if (!stopping) createCajaGroup()
+            else groupCreateInProgress = false
         }, delayMs, TimeUnit.MILLISECONDS)
     }
 
     @SuppressLint("MissingPermission")
     private fun createCajaGroup() {
-        if (!isCajaRegistradora() || stopping) return
-        val manager = p2p ?: return
-        val ch = channel ?: return
-        if (!hasPermission() || !wifiEnabled() || !locationModeEnabled()) return
+        if (!isCajaRegistradora() || stopping) {
+            groupCreateInProgress = false
+            return
+        }
+        val manager = p2p ?: run {
+            groupCreateInProgress = false
+            return
+        }
+        val ch = channel ?: run {
+            groupCreateInProgress = false
+            return
+        }
+        if (!hasPermission() || !wifiEnabled() || !locationModeEnabled()) {
+            groupCreateInProgress = false
+            return
+        }
 
         diagnostic("caja=createGroup; solicitando Group Owner fijo")
         manager.createGroup(ch, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
-                groupFormed = true
+                groupCreateInProgress = false
+                // createGroup() accepted the request; the actual connection
+                // state is confirmed only through requestConnectionInfo().
+                groupFormed = false
                 reconnectAttempt = 0
-                state("BUSCANDO", "Caja lista: esperando celulares Cocina Argentas…")
-                diagnostic("caja=createGroup=OK; esperando clientes")
+                state("CONECTANDO", "La Caja está formando su red directa…")
+                diagnostic("caja=createGroup=OK; esperando confirmación GROUP_FORMED/GO")
                 requestConnectionInfo()
             }
 
             override fun onFailure(reason: Int) {
+                groupCreateInProgress = false
+                groupFormed = false
                 diagnostic("caja=createGroup=FALLO(" + reason + ")")
                 if (reason == WifiP2pManager.BUSY) {
                     scheduleCajaGroupCreate(1500)
@@ -793,12 +819,20 @@ class ArgentasConnectionService : Service() {
         if (address.isBlank() || connected || !serviceAddresses.contains(address)) return
         if (serviceDeviceIds[address].isNullOrBlank()) return
         if (groupFormed) {
+            diagnostic("connect=IGNORADO; ya existe un grupo P2P; esperando ConnectionInfo")
             requestConnectionInfo()
             return
         }
+        if (p2pConnectInProgress) {
+            diagnostic("connect=YA_EN_CURSO; no se cancela ni duplica la negociación")
+            return
+        }
 
-        try { manager.cancelConnect(ch, null) } catch (_: Exception) {}
-
+        // Do NOT call cancelConnect() here. A second DNS-SD/TXT callback can
+        // arrive while Android is negotiating the first request; cancelling
+        // that negotiation was creating a race and could leave the phone in
+        // DISCOVERING even though the Caja had already been found.
+        p2pConnectInProgress = true
         prefs.edit().putString(LAST_PEER_KEY, address).apply()
         closeTransport()
         state("CONECTANDO", if (automatic) {
@@ -817,9 +851,12 @@ class ArgentasConnectionService : Service() {
         manager.connect(ch, config, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
                 state("CONECTANDO", "Wi-Fi Direct está formando el enlace…")
+                diagnostic("connect=OK; negociación P2P iniciada; esperando WIFI_P2P_CONNECTION_CHANGED")
             }
 
             override fun onFailure(reason: Int) {
+                p2pConnectInProgress = false
+                diagnostic("connect=FALLO(" + reason + "); negociación rechazada por Android")
                 state("DESCONECTADO", "Wi-Fi Direct no pudo conectar ($reason)")
                 scheduleReconnect(2000)
             }
@@ -889,6 +926,7 @@ class ArgentasConnectionService : Service() {
                 if (connected && socketIsAlive()) return@requestConnectionInfo
                 val wasGroup = groupFormed
                 groupFormed = false
+                if (!isCajaRegistradora()) p2pConnectInProgress = false
                 if (isCajaRegistradora()) {
                     if (wasGroup) state("BUSCANDO", "La Caja perdió el grupo; reconstruyendo…")
                     scheduleCajaGroupCreate(500)
@@ -905,6 +943,8 @@ class ArgentasConnectionService : Service() {
             }
 
             groupFormed = true
+            p2pConnectInProgress = false
+            groupCreateInProgress = false
             diagnostic("P2P=GRUPO_FORMADO; rol=" + deviceRole() + "; groupOwner=" + info.isGroupOwner + "; GO_ADDRESS=" + (info.groupOwnerAddress?.hostAddress ?: "desconocida"))
             rememberPeerFromGroup(manager, ch)
 
@@ -1207,6 +1247,7 @@ class ArgentasConnectionService : Service() {
         authorized = false
         lastHeartbeatAckAt = 0L
         tcpConnecting = false
+        p2pConnectInProgress = false
         heartbeatFuture?.cancel(false)
         heartbeatFuture = null
         try { socket?.close() } catch (_: Exception) {}

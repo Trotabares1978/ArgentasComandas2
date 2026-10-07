@@ -133,6 +133,13 @@ class MainActivity : AppCompatActivity() {
                                 "{detail:{type:'authorized'}}));"
                         )
                     }
+                    ArgentasConnectionService.EVENT_DIAGNOSTIC -> {
+                        val message = intent.getStringExtra(ArgentasConnectionService.EXTRA_MESSAGE) ?: return
+                        dispatchJs(
+                            "window.dispatchEvent(new CustomEvent('argentas-bluetooth'," +
+                                "{detail:{type:'diagnostic',payload:{message:" + JSONObject.quote(message) + "}}}));"
+                        )
+                    }
                 }
             }
         }

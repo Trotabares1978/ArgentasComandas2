@@ -875,6 +875,7 @@ class ArgentasConnectionService : Service() {
     private fun handleCommand(intent: Intent) {
         when (intent.getStringExtra(EXTRA_COMMAND)) {
             "refresh" -> discover()
+            "test_nearby" -> nearbyManager?.start()
             "start_server", "accept_incoming", "request_state" -> requestConnectionInfo()
             "connect" -> intent.getStringExtra(EXTRA_ADDRESS)?.let { connectP2P(it) }
             "reject_incoming" -> closeTransport()

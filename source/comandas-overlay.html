@@ -524,10 +524,10 @@ window.onBluetoothMessage=function(raw){raw.trim().split('\n').filter(Boolean).f
   }else if(m.type==='hello'){
     if(connected){
       try{window.ArgentasNativeBluetooth.send(JSON.stringify({type:'hello-ack',ts:Date.now()}))}catch(e){}
-      flushReliableState();flushOrderUpdate();
+      flushReliableState();flushComandaStatus();
     }
   }else if(m.type==='hello-ack'){
-    if(connected){flushReliableState();flushOrderUpdate()}
+    if(connected){flushReliableState();flushComandaStatus()}
   }
 }catch(e){console.warn('Mensaje de sincronización inválido',e)}})}
 window.addEventListener('argentas-bluetooth',function(e){if(!e.detail||e.detail.type!=='diagnostic')return;syncDiag.p2pDiagnostics=syncDiag.p2pDiagnostics||[];syncDiag.p2pDiagnostics.push(new Date().toLocaleTimeString('es-AR')+' — '+String(e.detail.payload&&e.detail.payload.message||''));if(syncDiag.p2pDiagnostics.length>30)syncDiag.p2pDiagnostics.shift();diagSave();updateDiagnostics()});

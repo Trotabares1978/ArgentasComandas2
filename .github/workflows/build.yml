@@ -26,7 +26,16 @@ jobs:
           java-version: "17"
 
       - name: Prepare Argentas
+        if: github.ref_name == 'main'
         run: python3 scripts/prepare_argentas.py
+
+      - name: Verify Supabase online build
+        if: github.ref_name == 'supabase-online'
+        run: |
+          grep -q "Supabase" app/src/main/assets/index.html
+          ! grep -q "Probar Nearby" app/src/main/assets/index.html
+          ! grep -q "ArgentasNearbyManager" app/src/main/assets/index.html
+          echo "OK: build is using the Supabase online transport."
 
       - name: Prepare icon
         run: |

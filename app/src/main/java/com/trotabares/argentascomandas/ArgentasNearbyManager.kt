@@ -71,7 +71,7 @@ class ArgentasNearbyManager(
             .build()
 
         client.startAdvertising(
-            (PREFIX + deviceId).toByteArray(StandardCharsets.UTF_8),
+            (PREFIX + localRole + ":" + deviceId).toByteArray(StandardCharsets.UTF_8),
             SERVICE_ID,
             lifecycleCallback,
             advertising
@@ -167,7 +167,17 @@ class ArgentasNearbyManager(
 
     private val lifecycleCallback = object : ConnectionLifecycleCallback() {
         override fun onConnectionInitiated(endpointId: String, info: ConnectionInfo) {
-            diagnostic("Nearby=CONEXION_INICIADA")
+            val raw = String(info.endpointInfo ?: ByteArray(0), StandardCharsets.UTF_8)
+            val parts = raw.removePrefix(PREFIX).split(":", limit = 2)
+            val remoteRole = if (raw.startsWith(PREFIX) && parts.size == 2) parts[0].lowercase() else ""
+            val validRemote = (localRole == ROLE_CAJA && remoteRole == ROLE_COCINA) ||
+                (localRole == ROLE_COCINA && remoteRole == ROLE_CAJA)
+            diagnostic("Nearby=CONEXION_INICIADA; rol_remoto=" + (remoteRole.ifBlank { "desconocido" }))
+            if (!validRemote) {
+                diagnostic("Nearby=CONEXION_RECHAZADA; rol Argentas no válido")
+                client.rejectConnection(endpointId)
+                return
+            }
             client.acceptConnection(endpointId, payloadCallback)
                 .addOnFailureListener { e ->
                     diagnostic("Nearby=ACEPTACION_FALLO; " + (e.message ?: e.javaClass.simpleName))

@@ -62,7 +62,7 @@ class ArgentasNearbyManager(
             .build()
 
         client.startAdvertising(
-            PREFIX + deviceId,
+            (PREFIX + deviceId).toByteArray(StandardCharsets.UTF_8),
             SERVICE_ID,
             lifecycleCallback,
             advertising
@@ -119,7 +119,7 @@ class ArgentasNearbyManager(
             if (deviceId < remoteId && connectedEndpoint == null) {
                 diagnostic("Nearby=SOLICITANDO_CONEXION")
                 client.requestConnection(
-                    PREFIX + deviceId,
+                    (PREFIX + deviceId).toByteArray(StandardCharsets.UTF_8),
                     endpointId,
                     lifecycleCallback
                 ).addOnSuccessListener {

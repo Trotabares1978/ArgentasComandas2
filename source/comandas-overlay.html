@@ -70,9 +70,9 @@
 if(window.argentasCustomizeProduct)return;
 window.argentasCustomizeProduct=function(product,onAdd){
   var id=String(product&&product.id||'');
-  var customIds=['p3','p4','p5','p6','p7','p8','p9','p10'];
+  var customIds=['h1','h2','h3','h4','m1','m1q','m2','m2q'];
   if(customIds.indexOf(id)<0)return false;
-  var hasCheese=['p3','p4','p5','p6','p8','p10'].indexOf(id)>=0;
+  var hasCheese=['h1','h2','h3','h4','m1q','m2q'].indexOf(id)>=0;
   var old=document.getElementById('argentas-v-custom-modal');if(old)old.remove();
   var m=document.createElement('div');m.id='argentas-v-custom-modal';
   m.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center;padding:18px';

@@ -419,6 +419,8 @@ class ArgentasConnectionService : Service() {
         ch: WifiP2pManager.Channel
     ) {
         val now = System.currentTimeMillis()
+        if (now - lastServiceDiscoveryAt < SERVICE_DISCOVERY_INTERVAL_MS) return
+        lastServiceDiscoveryAt = now
         val stale = serviceSeenAt.filterValues { now - it > SERVICE_STALE_MS }.keys.toList()
         stale.forEach {
             serviceSeenAt.remove(it)

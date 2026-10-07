@@ -53,6 +53,7 @@ class ArgentasConnectionService : Service() {
         const val EVENT_MESSAGE = "message"
         const val EVENT_DEVICES = "devices"
         const val EVENT_AUTHORIZED = "authorized"
+        const val EVENT_DIAGNOSTIC = "diagnostic"
 
         private const val CHANNEL_ID = "argentas_connection"
         private const val NOTIFICATION_ID = 8988
@@ -88,6 +89,7 @@ class ArgentasConnectionService : Service() {
     private val serviceSeenAt = mutableMapOf<String, Long>()
     private var localService: WifiP2pDnsSdServiceInfo? = null
     private var serviceRequest: WifiP2pDnsSdServiceRequest? = null
+    private var lastPeerCount = -1
     @Volatile private var serviceReady = false
     @Volatile private var peerDiscoveryRunning = false
 
@@ -324,20 +326,24 @@ class ArgentasConnectionService : Service() {
             override fun onSuccess() {
                 manager.addLocalService(ch, info, object : WifiP2pManager.ActionListener {
                     override fun onSuccess() {
+                        diagnostic("addLocalService=OK; servicio=_argentas._tcp")
                         installServiceRequest(manager, ch)
                     }
                     override fun onFailure(reason: Int) {
-                        state("ERROR", "No se pudo publicar el servicio Argentas ($reason)")
+                        diagnostic("addLocalService=FALLO(" + reason + ")")
+                        state("ERROR", "No se pudo publicar el servicio Argentas (" + reason + ")")
                     }
                 })
             }
             override fun onFailure(reason: Int) {
                 manager.addLocalService(ch, info, object : WifiP2pManager.ActionListener {
                     override fun onSuccess() {
+                        diagnostic("addLocalService=OK (fallback); servicio=_argentas._tcp")
                         installServiceRequest(manager, ch)
                     }
                     override fun onFailure(addReason: Int) {
-                        state("ERROR", "No se pudo publicar el servicio Argentas ($addReason)")
+                        diagnostic("addLocalService=FALLO(" + addReason + ") (fallback)")
+                        state("ERROR", "No se pudo publicar el servicio Argentas (" + addReason + ")")
                     }
                 })
             }
@@ -370,12 +376,14 @@ class ArgentasConnectionService : Service() {
         manager.addServiceRequest(ch, request, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
                 serviceReady = true
+                diagnostic("addServiceRequest=OK; servicio=_argentas._tcp")
                 startPeerDiscovery(manager, ch)
                 discoverServices(manager, ch)
             }
             override fun onFailure(reason: Int) {
+                diagnostic("addServiceRequest=FALLO(" + reason + ")")
                 startPeerDiscovery(manager, ch)
-                state("ERROR", "No se pudo preparar la búsqueda de Argentas ($reason); reintentando…")
+                state("ERROR", "No se pudo preparar la búsqueda de Argentas (" + reason + "); reintentando…")
                 scheduleReconnect(1500)
             }
         })
@@ -390,15 +398,11 @@ class ArgentasConnectionService : Service() {
         manager.discoverPeers(ch, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
                 peerDiscoveryRunning = true
-                // Peer discovery is only a transport-level fallback/candidate scan.
-                // The UI still shows only DNS-SD Argentas services.
+                diagnostic("discoverPeers=OK; inicio de escaneo P2P")
             }
             override fun onFailure(reason: Int) {
-                if (reason == WifiP2pManager.BUSY) {
-                    // BUSY commonly means discovery is already active; let the
-                    // framework broadcast keep the running flag authoritative.
-                    return
-                }
+                diagnostic("discoverPeers=FALLO(" + reason + ")")
+                if (reason == WifiP2pManager.BUSY) return
                 peerDiscoveryRunning = false
                 scheduleReconnect(1500)
             }
@@ -424,9 +428,11 @@ class ArgentasConnectionService : Service() {
         manager.discoverServices(ch, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
                 state("BUSCANDO", "Buscando otros Argentas…")
+                diagnostic("discoverServices=OK; peers=" + lastPeerCount)
             }
             override fun onFailure(reason: Int) {
-                state("ERROR", "No se pudo buscar Argentas por Wi-Fi Direct ($reason)")
+                diagnostic("discoverServices=FALLO(" + reason + "); peers=" + lastPeerCount)
+                state("ERROR", "No se pudo buscar Argentas por Wi-Fi Direct (" + reason + ")")
                 scheduleReconnect(3000)
             }
         })
@@ -434,10 +440,20 @@ class ArgentasConnectionService : Service() {
 
     @SuppressLint("MissingPermission")
     private fun requestPeers() {
-        // Intencionalmente no mostramos requestPeers(): devuelve dispositivos Wi-Fi
-        // genéricos (TV, impresoras, etc.). La lista visible se alimenta exclusivamente
-        // del servicio DNS-SD _argentas._tcp.
-        publishDevices()
+        val manager = p2p ?: return
+        val ch = channel ?: return
+        if (!hasPermission()) return
+        manager.requestPeers(ch) { list ->
+            val peers = list.deviceList.toList()
+            lastPeerCount = peers.size
+            val names = peers.take(8).joinToString(" | ") {
+                val name = it.deviceName.takeIf { n -> n.isNotBlank() } ?: "sin nombre"
+                name + " [" + it.deviceAddress + "]"
+            }
+            diagnostic("requestPeers: " + peers.size + " dispositivo(s)" +
+                if (names.isNotBlank()) " → " + names else " → ninguno")
+            publishDevices()
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -829,6 +845,10 @@ class ArgentasConnectionService : Service() {
         currentState = value
         currentText = text
         event(EVENT_STATE, stateValue = value, textValue = text)
+    }
+
+    private fun diagnostic(text: String) {
+        event(EVENT_DIAGNOSTIC, message = text)
     }
 
     private fun createChannel() {

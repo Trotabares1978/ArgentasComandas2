@@ -760,6 +760,7 @@ class ArgentasConnectionService : Service() {
                     sendRaw(JSONObject().put("type", "hello-ack").put("ts", System.currentTimeMillis()).toString())
                     if (!authorized) {
                         authorized = true
+                        reconnectAttempt = 0
                         state("CONECTADO", "Conectado directamente con otro Argentas")
                         event(EVENT_AUTHORIZED)
                     }
@@ -768,6 +769,7 @@ class ArgentasConnectionService : Service() {
                     lastHeartbeatAckAt = System.currentTimeMillis()
                     if (!authorized) {
                         authorized = true
+                        reconnectAttempt = 0
                         state("CONECTADO", "Conectado directamente con otro Argentas")
                         event(EVENT_AUTHORIZED)
                     }
@@ -814,6 +816,7 @@ class ArgentasConnectionService : Service() {
         epoch.incrementAndGet()
         connected = false
         authorized = false
+        lastHeartbeatAckAt = 0L
         tcpConnecting = false
         heartbeatFuture?.cancel(false)
         heartbeatFuture = null
@@ -826,6 +829,13 @@ class ArgentasConnectionService : Service() {
     private fun scheduleReconnect(delayMs: Long = 1500) {
         if (stopping || reconnectScheduled || connected) return
         reconnectScheduled = true
+        val backoffDelay = minOf(
+            MAX_RECONNECT_DELAY_MS,
+            2000L * (1L shl minOf(reconnectAttempt, 5))
+        )
+        val effectiveDelay = maxOf(delayMs, backoffDelay)
+        reconnectAttempt = minOf(reconnectAttempt + 1, 5)
+        diagnostic("reconnect=programado; intento=" + reconnectAttempt + "; espera=" + effectiveDelay + " ms")
         reconnect.schedule({
             reconnectScheduled = false
             if (!stopping && !connected) {
@@ -835,7 +845,7 @@ class ArgentasConnectionService : Service() {
                     discover()
                 }
             }
-        }, delayMs, TimeUnit.MILLISECONDS)
+        }, effectiveDelay, TimeUnit.MILLISECONDS)
     }
 
     private fun handleCommand(intent: Intent) {

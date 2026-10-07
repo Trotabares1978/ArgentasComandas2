@@ -1,34 +1,36 @@
 package com.trotabares.argentascomandas
 
-import android.Manifest
-import android.annotation.SuppressLint
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
-import org.json.JSONArray
-import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.io.OutputStream
+import java.net.InetSocketAddress
+import java.net.Socket
+import java.nio.charset.StandardCharsets
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
-    private val permissionRequest = 4107
     private var webViewReady = false
-    private var pendingEvents = mutableListOf<String>()
-    private var receiver: BroadcastReceiver? = null
+    private val pendingEvents = mutableListOf<String>()
+    private val io: ExecutorService = Executors.newCachedThreadPool()
+    @Volatile private var bridgeSocket: Socket? = null
+    @Volatile private var bridgeOut: OutputStream? = null
+    @Volatile private var running = true
+
+    companion object {
+        private const val BRIDGE_HOST = "127.0.0.1"
+        private const val BRIDGE_PORT = 45680
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         webView = WebView(this)
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
@@ -36,209 +38,136 @@ class MainActivity : AppCompatActivity() {
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 webViewReady = true
-                sendCommand("request_state")
+                connectToArgentasLink()
                 flushPendingEvents()
             }
         }
         webView.webChromeClient = WebChromeClient()
         webView.addJavascriptInterface(NativeBluetoothBridge(), "ArgentasNativeBluetooth")
         setContentView(webView)
-
-        registerServiceReceiver()
-        ContextCompat.startForegroundService(
-            this,
-            Intent(this, ArgentasConnectionService::class.java)
-        )
-
         webView.loadUrl("file:///android_asset/index.html")
-        ensurePermissions()
     }
 
-    private fun requiredPermissions(): Array<String> {
-        val list = mutableListOf(
-            Manifest.permission.ACCESS_WIFI_STATE,
-            Manifest.permission.CHANGE_WIFI_STATE,
-            Manifest.permission.ACCESS_NETWORK_STATE,
-            Manifest.permission.CHANGE_NETWORK_STATE,
-            Manifest.permission.INTERNET
-        )
-        if (Build.VERSION.SDK_INT >= 33) {
-            list += Manifest.permission.NEARBY_WIFI_DEVICES
-            list += Manifest.permission.ACCESS_FINE_LOCATION
-            list += Manifest.permission.BLUETOOTH_ADVERTISE
-            list += Manifest.permission.BLUETOOTH_CONNECT
-            list += Manifest.permission.BLUETOOTH_SCAN
-            list += Manifest.permission.POST_NOTIFICATIONS
-        } else {
-            list += Manifest.permission.ACCESS_COARSE_LOCATION
-            list += Manifest.permission.ACCESS_FINE_LOCATION
-        }
-        return list.distinct().toTypedArray()
-    }
-
-    private fun hasP2pPermission(): Boolean {
-        return Build.VERSION.SDK_INT < 33 ||
-            ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.NEARBY_WIFI_DEVICES
-            ) == PackageManager.PERMISSION_GRANTED ||
-            ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-    }
-
-    private fun ensurePermissions() {
-        val needed = requiredPermissions().filter {
-            ActivityCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-        }
-        if (needed.isNotEmpty()) {
-            ActivityCompat.requestPermissions(this, needed.toTypedArray(), permissionRequest)
-        } else {
-            startConnectionService()
-        }
-    }
-
-    private fun startConnectionService() {
-        if (!hasP2pPermission()) return
-        ContextCompat.startForegroundService(
-            this,
-            Intent(this, ArgentasConnectionService::class.java)
-        )
-        sendCommand("request_state")
-    }
-
-    private fun registerServiceReceiver() {
-        receiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                when (intent?.getStringExtra("type")) {
-                    ArgentasConnectionService.EVENT_STATE -> {
-                        val state = intent.getStringExtra(ArgentasConnectionService.EXTRA_STATE) ?: "DESCONECTADO"
-                        val text = intent.getStringExtra(ArgentasConnectionService.EXTRA_TEXT) ?: state
-                        dispatchJs(
-                            "window.onBluetoothState&&window.onBluetoothState(" +
-                                JSONObject.quote(state) + "," + JSONObject.quote(text) + ");"
-                        )
+    private fun connectToArgentasLink() {
+        io.execute {
+            while (running) {
+                try {
+                    if (bridgeSocket?.isConnected == true && bridgeSocket?.isClosed == false) {
+                        Thread.sleep(1500)
+                        continue
                     }
-                    ArgentasConnectionService.EVENT_MESSAGE -> {
-                        val message = intent.getStringExtra(ArgentasConnectionService.EXTRA_MESSAGE) ?: return
-                        dispatchJs(
-                            "window.onBluetoothMessage&&window.onBluetoothMessage(" +
-                                JSONObject.quote(message) + ");"
-                        )
+                    dispatchState("CONECTANDO", "Conectando con ArgentasLink…")
+                    val s = Socket()
+                    s.tcpNoDelay = true
+                    s.keepAlive = true
+                    s.connect(InetSocketAddress(BRIDGE_HOST, BRIDGE_PORT), 1200)
+                    synchronized(this) {
+                        bridgeSocket = s
+                        bridgeOut = s.getOutputStream()
                     }
-                    ArgentasConnectionService.EVENT_DEVICES -> {
-                        val devices = intent.getStringExtra(ArgentasConnectionService.EXTRA_DEVICES) ?: "[]"
-                        dispatchJs(
-                            "window.dispatchEvent(new CustomEvent(" +
-                                JSONObject.quote("argentas-bluetooth") +
-                                ",{detail:{type:" + JSONObject.quote("devices") +
-                                ",payload:{devices:" + devices + "}}}));"
-                        )
-                    }
-                    ArgentasConnectionService.EVENT_AUTHORIZED -> {
-                        dispatchJs(
-                            "window.dispatchEvent(new CustomEvent('argentas-bluetooth'," +
-                                "{detail:{type:'authorized'}}));"
-                        )
-                    }
-                    ArgentasConnectionService.EVENT_DIAGNOSTIC -> {
-                        val message = intent.getStringExtra(ArgentasConnectionService.EXTRA_MESSAGE) ?: return
-                        dispatchJs(
-                            "window.dispatchEvent(new CustomEvent('argentas-bluetooth'," +
-                                "{detail:{type:'diagnostic',payload:{message:" + JSONObject.quote(message) + "}}}));"
-                        )
-                    }
+                    dispatchState("CONECTADO", "ArgentasLink disponible")
+                    io.execute { readBridge(s) }
+                    while (running && bridgeSocket === s && !s.isClosed) Thread.sleep(1000)
+                } catch (_: Exception) {
+                    closeBridge()
+                    dispatchState("DESCONECTADO", "ArgentasLink no está disponible")
+                    Thread.sleep(1500)
                 }
             }
         }
-
-        val filter = IntentFilter(ArgentasConnectionService.ACTION_EVENT)
-        if (Build.VERSION.SDK_INT >= 33) {
-            registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            @Suppress("DEPRECATION")
-            registerReceiver(receiver, filter)
-        }
     }
 
-    private fun dispatchJs(script: String) {
-        if (!webViewReady) {
-            pendingEvents.add(script)
-            if (pendingEvents.size > 100) pendingEvents.removeAt(0)
-            return
-        }
-        webView.evaluateJavascript(script, null)
-    }
-
-    private fun flushPendingEvents() {
-        val events = pendingEvents.toList()
-        pendingEvents.clear()
-        events.forEach { webView.evaluateJavascript(it, null) }
-    }
-
-    private fun sendCommand(
-        command: String,
-        address: String? = null,
-        message: String? = null
-    ) {
-        val intent = Intent(this, ArgentasConnectionService::class.java)
-            .putExtra(ArgentasConnectionService.EXTRA_COMMAND, command)
-        address?.let { intent.putExtra(ArgentasConnectionService.EXTRA_ADDRESS, it) }
-        message?.let { intent.putExtra(ArgentasConnectionService.EXTRA_MESSAGE, it) }
-        ContextCompat.startForegroundService(this, intent)
-    }
-
-    inner class NativeBluetoothBridge {
-        @JavascriptInterface
-        fun refresh() = sendCommand("refresh")
-
-        @JavascriptInterface
-        fun startNearby() = sendCommand("test_nearby")
-
-        @JavascriptInterface
-        fun stopNearby() = sendCommand("nearby_stop")
-
-        @JavascriptInterface
-        fun startServer() = sendCommand("start_server")
-
-        @JavascriptInterface
-        fun connect(address: String) = sendCommand("connect", address = address)
-
-        @JavascriptInterface
-        fun acceptIncoming() = sendCommand("accept_incoming")
-
-        @JavascriptInterface
-        fun rejectIncoming() = sendCommand("reject_incoming")
-
-        @JavascriptInterface
-        fun send(message: String) = sendCommand("send", message = message)
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == permissionRequest) {
-            if (grantResults.isNotEmpty() && grantResults.all {
-                    it == PackageManager.PERMISSION_GRANTED
-                }) {
-                startConnectionService()
-            } else {
-                dispatchJs(
-                    "window.onBluetoothState&&window.onBluetoothState(" +
-                        JSONObject.quote("ERROR") + "," +
-                        JSONObject.quote("Argentas necesita permisos de Wi-Fi Direct para conectar los dos equipos") +
-                        ");"
-                )
+    private fun readBridge(s: Socket) {
+        try {
+            val reader = BufferedReader(InputStreamReader(s.getInputStream(), StandardCharsets.UTF_8))
+            while (running && bridgeSocket === s && !s.isClosed) {
+                val line = reader.readLine() ?: break
+                when {
+                    line.startsWith("APP|") -> dispatchMessage(line.substring(4))
+                    line.startsWith("LINK_STATE|") -> {
+                        val state = line.substringAfter("LINK_STATE|")
+                        if (state == "CONECTADO") dispatchState("CONECTADO", "ArgentasLink conectado con el otro equipo")
+                        else dispatchState("DESCONECTADO", "ArgentasLink esperando al otro equipo")
+                    }
+                }
+            }
+        } catch (_: Exception) {
+        } finally {
+            if (bridgeSocket === s) {
+                closeBridge()
+                dispatchState("DESCONECTADO", "ArgentasLink no está disponible")
             }
         }
     }
 
+    private fun sendRawLocal(message: String) {
+        io.execute {
+            try {
+                val out = bridgeOut ?: return@execute
+                synchronized(out) {
+                    out.write((message.replace("\r", "").replace("\n", "") + "\n").toByteArray(StandardCharsets.UTF_8))
+                    out.flush()
+                }
+            } catch (_: Exception) {
+                closeBridge()
+            }
+        }
+    }
+
+    private fun closeBridge() {
+        try { bridgeSocket?.close() } catch (_: Exception) {}
+        bridgeSocket = null
+        bridgeOut = null
+    }
+
+    private fun dispatchMessage(message: String) {
+        dispatchJs("window.onBluetoothMessage&&window.onBluetoothMessage(" +
+            org.json.JSONObject.quote(message) + ");")
+    }
+
+    private fun dispatchState(state: String, text: String) {
+        dispatchJs("window.onBluetoothState&&window.onBluetoothState(" +
+            org.json.JSONObject.quote(state) + "," +
+            org.json.JSONObject.quote(text) + ");")
+    }
+
+    private fun dispatchJs(script: String) {
+        runOnUiThread {
+            if (!webViewReady) {
+                synchronized(pendingEvents) {
+                    pendingEvents.add(script)
+                    if (pendingEvents.size > 100) pendingEvents.removeAt(0)
+                }
+            } else {
+                webView.evaluateJavascript(script, null)
+            }
+        }
+    }
+
+    private fun flushPendingEvents() {
+        val events = synchronized(pendingEvents) {
+            val copy = pendingEvents.toList()
+            pendingEvents.clear()
+            copy
+        }
+        events.forEach { webView.evaluateJavascript(it, null) }
+    }
+
+    inner class NativeBluetoothBridge {
+        @JavascriptInterface fun refresh() = connectToArgentasLink()
+        @JavascriptInterface fun startNearby() = connectToArgentasLink()
+        @JavascriptInterface fun stopNearby() {}
+        @JavascriptInterface fun startServer() = connectToArgentasLink()
+        @JavascriptInterface fun connect(address: String) = connectToArgentasLink()
+        @JavascriptInterface fun acceptIncoming() = connectToArgentasLink()
+        @JavascriptInterface fun rejectIncoming() {}
+        @JavascriptInterface fun send(message: String) = sendRawLocal("APP|$message")
+    }
+
     override fun onDestroy() {
-        try { receiver?.let { unregisterReceiver(it) } } catch (_: Exception) {}
+        running = false
+        closeBridge()
+        io.shutdownNow()
         webViewReady = false
         super.onDestroy()
     }

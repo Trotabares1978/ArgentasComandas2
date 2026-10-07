@@ -197,9 +197,14 @@ function undo(){
     return;
   }
   if(a.type==='create'&&o&&Number(o.updatedAt||0)>Number(a.at||0)){lastAction=null;renderUndo();return}
-  if((a.type==='status'||a.type==='hide')&&a.snapshot){var restoredStatus=JSON.parse(JSON.stringify(a.snapshot)),idxStatus=db.orders.findIndex(function(x){return x&&x.id===a.id});restoredStatus.updatedAt=Date.now();if(idxStatus>=0)db.orders[idxStatus]=restoredStatus;else db.orders.unshift(restoredStatus);save();importOrdersToCaja([restoredStatus]);lastAction=null;try{localStorage.removeItem('argentas_last_action')}catch(e){}renderAll();renderUndo();sync();return}
+  if((a.type==='status'||a.type==='hide')&&a.snapshot){var restoredStatus=JSON.parse(JSON.stringify(a.snapshot)),idxStatus=db.orders.findIndex(function(x){return x&&x.id===a.id});restoredStatus.updatedAt=Date.now();if(idxStatus>=0)db.orders[idxStatus]=restoredStatus;else db.orders.unshift(restoredStatus);save();importOrdersToCaja([restoredStatus]);lastAction=null;try{localStorage.removeItem('argentas_last_action')}catch(e){}renderAfterUndo();renderUndo();sync();return}
   if(a.type==='create'&&o){o.status='oculta';o.updatedAt=Date.now();save();importOrdersToCaja([o]);lastAction=null;try{localStorage.removeItem('argentas_last_action')}catch(e){}renderAll();renderUndo();sync();return}
-  if(a.type==='hide'&&o){o.status='entregada';o.updatedAt=Date.now();save();importOrdersToCaja([o]);lastAction=null;try{localStorage.removeItem('argentas_last_action')}catch(e){}renderAll();renderUndo();sync()}
+  if(a.type==='hide'&&o){o.status='entregada';o.updatedAt=Date.now();save();importOrdersToCaja([o]);lastAction=null;try{localStorage.removeItem('argentas_last_action')}catch(e){}renderAfterUndo();renderUndo();sync()}
+}
+function renderAfterUndo(){
+  try{renderAll()}catch(e){try{renderOrders()}catch(_){}}
+  try{requestAnimationFrame(function(){try{renderAll()}catch(e){try{renderOrders()}catch(_){} }})}catch(e){}
+  setTimeout(function(){try{renderOrders();renderUndo()}catch(e){}},120);
 }
 function p(id){return db.products.find(function(x){return x.id===id})}function money(n){return '$'+Number(n||0).toLocaleString('es-AR')}function sum(a){return a.reduce(function(s,x){return s+x.qty*x.price},0)}
 var PRODUCT_META_KEY='argentas_comandas_product_meta';

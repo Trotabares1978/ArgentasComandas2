@@ -111,14 +111,50 @@ class ArgentasConnectionService : Service() {
     @Volatile private var reconnectAttempt = 0
     @Volatile private var currentState = "DESCONECTADO"
     @Volatile private var currentText = "Conexión directa no iniciada"
+    private enum class Transport { WIFI_DIRECT, NEARBY }
+
+    @Volatile private var transport = Transport.WIFI_DIRECT
     private var nearbyManager: ArgentasNearbyManager? = null
+    private var nearbyFallbackFuture: ScheduledFuture<*>? = null
+    private var nearbyFallbackScheduled = false
 
     override fun onCreate() {
         super.onCreate()
         createChannel()
         startForeground(NOTIFICATION_ID, notification())
         registerP2P()
-        nearbyManager = ArgentasNearbyManager(this, deviceId) { msg -> diagnostic(msg) }
+        nearbyManager = ArgentasNearbyManager(
+            this,
+            deviceId,
+            onMessage = { msg -> handleIncomingLine(msg) },
+            onConnected = {
+                if (connected) {
+                    diagnostic("Nearby=DESCARTADO; Wi-Fi Direct ya estaba conectado")
+                    nearbyManager?.stop()
+                } else {
+                    transport = Transport.NEARBY
+                    connected = true
+                    authorized = false
+                    lastHeartbeatAckAt = System.currentTimeMillis()
+                    reconnectScheduled = false
+                    nearbyFallbackFuture?.cancel(false)
+                    state("CONECTANDO", "Nearby creó el canal; verificando Argentas…")
+                    sendTransportHello()
+                    startHeartbeat()
+                }
+            },
+            onDisconnected = {
+                if (transport == Transport.NEARBY && !stopping) {
+                    connected = false
+                    authorized = false
+                    lastHeartbeatAckAt = 0L
+                    transport = Transport.WIFI_DIRECT
+                    state("DESCONECTADO", "Nearby perdió el enlace; volviendo a buscar…")
+                    scheduleNearbyFallback(1500)
+                }
+            },
+            diagnostic = { msg -> diagnostic(msg) }
+        )
     }
 
     private fun hasPermission(): Boolean {
@@ -258,6 +294,7 @@ class ArgentasConnectionService : Service() {
         discoveryFuture = reconnect.scheduleAtFixedRate({
             if (!stopping && !connected && !groupFormed) discover()
         }, 500, DISCOVERY_INTERVAL_MS, TimeUnit.MILLISECONDS)
+        scheduleNearbyFallback(8000)
     }
 
     private fun locationModeEnabled(): Boolean {
@@ -543,6 +580,7 @@ class ArgentasConnectionService : Service() {
             override fun onFailure(reason: Int) {
                 state("DESCONECTADO", "Wi-Fi Direct no pudo conectar ($reason)")
                 scheduleReconnect(2000)
+                scheduleNearbyFallback(2500)
             }
         })
     }
@@ -686,6 +724,7 @@ class ArgentasConnectionService : Service() {
             if (!established && !connected && !stopping) {
                 diagnostic("tcp=FALLO; agotados 5 intentos; grupo=" + groupFormed)
                 scheduleReconnect(1000)
+                scheduleNearbyFallback(1500)
             }
         }
     }
@@ -780,12 +819,24 @@ class ArgentasConnectionService : Service() {
                     return
                 }
                 "hello" -> {
+                    val app = obj.optString("app")
+                    val protocol = obj.optInt("protocol", -1)
+                    if (app != "ARGENTAS" || protocol != 1) {
+                        diagnostic("hello=RECHAZADO; app/protocolo no compatibles")
+                        return
+                    }
                     lastHeartbeatAckAt = System.currentTimeMillis()
                     sendRaw(JSONObject().put("type", "hello-ack").put("ts", System.currentTimeMillis()).toString())
                     if (!authorized) {
                         authorized = true
                         reconnectAttempt = 0
-                        state("CONECTADO", "Conectado directamente con otro Argentas")
+                        nearbyFallbackFuture?.cancel(false)
+                        nearbyFallbackScheduled = false
+                        if (transport == Transport.WIFI_DIRECT) nearbyManager?.stop()
+                        state("CONECTADO", if (transport == Transport.NEARBY)
+                            "Conectado por Nearby con otro Argentas"
+                        else
+                            "Conectado directamente con otro Argentas")
                         event(EVENT_AUTHORIZED)
                     }
                 }
@@ -794,7 +845,13 @@ class ArgentasConnectionService : Service() {
                     if (!authorized) {
                         authorized = true
                         reconnectAttempt = 0
-                        state("CONECTADO", "Conectado directamente con otro Argentas")
+                        nearbyFallbackFuture?.cancel(false)
+                        nearbyFallbackScheduled = false
+                        if (transport == Transport.WIFI_DIRECT) nearbyManager?.stop()
+                        state("CONECTADO", if (transport == Transport.NEARBY)
+                            "Conectado por Nearby con otro Argentas"
+                        else
+                            "Conectado directamente con otro Argentas")
                         event(EVENT_AUTHORIZED)
                     }
                 }
@@ -806,8 +863,17 @@ class ArgentasConnectionService : Service() {
     }
 
     private fun sendRaw(message: String) {
+        if (!connected) return
+
+        if (transport == Transport.NEARBY) {
+            if (nearbyManager?.send(message) != true) {
+                diagnostic("Nearby=ENVIO_FALLO")
+            }
+            return
+        }
+
         val s = socket ?: return
-        if (!connected || s.isClosed) return
+        if (s.isClosed) return
         writer.execute {
             try {
                 val clean = message.replace("\r", "").replace("\n", "") + "\n"
@@ -838,6 +904,7 @@ class ArgentasConnectionService : Service() {
 
     private fun closeTransport() {
         epoch.incrementAndGet()
+        val wasNearby = transport == Transport.NEARBY
         connected = false
         authorized = false
         lastHeartbeatAckAt = 0L
@@ -848,6 +915,23 @@ class ArgentasConnectionService : Service() {
         socket = null
         try { server?.close() } catch (_: Exception) {}
         server = null
+        if (wasNearby) {
+            transport = Transport.WIFI_DIRECT
+            nearbyManager?.stop()
+        }
+    }
+
+    private fun scheduleNearbyFallback(delayMs: Long = 8000) {
+        if (stopping || connected || nearbyFallbackScheduled) return
+        nearbyFallbackScheduled = true
+        diagnostic("nearby=fallback_programado; espera=" + delayMs + " ms")
+        nearbyFallbackFuture = reconnect.schedule({
+            nearbyFallbackScheduled = false
+            if (!stopping && !connected) {
+                diagnostic("nearby=fallback_iniciando")
+                nearbyManager?.start()
+            }
+        }, delayMs, TimeUnit.MILLISECONDS)
     }
 
     private fun scheduleReconnect(delayMs: Long = 1500) {
@@ -951,6 +1035,8 @@ class ArgentasConnectionService : Service() {
         closeTransport()
         discoveryFuture?.cancel(true)
         heartbeatFuture?.cancel(true)
+        nearbyFallbackFuture?.cancel(true)
+        nearbyManager?.stop()
         reconnect.shutdownNow()
         writer.shutdownNow()
         io.shutdownNow()

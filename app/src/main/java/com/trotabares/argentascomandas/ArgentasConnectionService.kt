@@ -12,10 +12,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.wifi.p2p.WifiP2pConfig
-import android.net.wifi.p2p.WifiP2pDevice
-import android.net.wifi.p2p.WifiP2pDeviceList
-import android.net.wifi.p2p.WifiP2pDnsSdServiceInfo
-import android.net.wifi.p2p.WifiP2pDnsSdServiceRequest
+import android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceInfo
+import android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceRequest
 import java.util.Locale
 import android.net.wifi.p2p.WifiP2pInfo
 import android.net.wifi.p2p.WifiP2pManager
@@ -122,18 +120,7 @@ class ArgentasConnectionService : Service() {
             return
         }
 
-        channel = manager.initialize(
-            this,
-            mainLooper,
-            object : WifiP2pManager.ChannelListener {
-                override fun onChannelDisconnected() {
-                    channel = null
-                    closeTransport()
-                    state("ERROR", "Wi-Fi Direct perdió el canal")
-                    scheduleReconnect()
-                }
-            }
-        )
+        initializeP2PChannel(manager)
 
         receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
@@ -183,6 +170,30 @@ class ArgentasConnectionService : Service() {
     private fun socketIsAlive(): Boolean {
         val s = socket
         return s != null && s.isConnected && !s.isClosed
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun initializeP2PChannel(manager: WifiP2pManager) {
+        if (stopping) return
+        channel = manager.initialize(
+            this,
+            mainLooper,
+            object : WifiP2pManager.ChannelListener {
+                override fun onChannelDisconnected() {
+                    channel = null
+                    closeTransport()
+                    state("ERROR", "Wi-Fi Direct perdió el canal; reiniciando el enlace…")
+                    reconnectScheduled = false
+                    reconnect.schedule({
+                        if (!stopping) {
+                            initializeP2PChannel(manager)
+                            setupServiceDiscovery()
+                            requestConnectionInfo()
+                        }
+                    }, 1000, TimeUnit.MILLISECONDS)
+                }
+            }
+        )
     }
 
     @SuppressLint("MissingPermission")
@@ -260,7 +271,12 @@ class ArgentasConnectionService : Service() {
         ch: WifiP2pManager.Channel
     ) {
         serviceRequest?.let { old ->
-            try { manager.removeServiceRequest(ch, old, null) } catch (_: Exception) {}
+            try {
+                manager.removeServiceRequest(ch, old, object : WifiP2pManager.ActionListener {
+                    override fun onSuccess() {}
+                    override fun onFailure(@Suppress("UNUSED_PARAMETER") reason: Int) {}
+                })
+            } catch (_: Exception) {}
         }
         val request = WifiP2pDnsSdServiceRequest.newInstance(
             "_argentas._tcp"
@@ -308,24 +324,13 @@ class ArgentasConnectionService : Service() {
     @SuppressLint("MissingPermission")
     private fun discover() {
         val manager = p2p ?: return
-        val ch = channel ?: return
         if (!hasPermission()) return
-
-        devices.clear()
-        publishDevices()
-        state("BUSCANDO", "Buscando dispositivos cercanos por Wi-Fi Direct…")
-
-        manager.discoverPeers(ch, object : WifiP2pManager.ActionListener {
-            override fun onSuccess() {
-                state("BUSCANDO", "Buscando el otro Argentas…")
-                requestPeers()
-            }
-
-            override fun onFailure(reason: Int) {
-                state("ERROR", "No se pudo iniciar la búsqueda Wi-Fi Direct ($reason)")
-                scheduleReconnect(3000)
-            }
-        })
+        if (channel == null) {
+            initializeP2PChannel(manager)
+            scheduleReconnect(500)
+            return
+        }
+        setupServiceDiscovery()
     }
 
     private fun publishDevices() {

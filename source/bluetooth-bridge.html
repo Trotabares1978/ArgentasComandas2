@@ -17,6 +17,16 @@ window.addEventListener('argentas-bluetooth',function(e){
  if(d.type==='state'){
    var s=document.getElementById('argentas-bt-status');
    if(s)s.textContent=p.state+(p.message?' — '+p.message:'');
+   var rb=document.getElementById('argentas-link-retry');
+   if(rb){
+     if(p.state==='CONECTANDO'){
+       rb.disabled=true; rb.textContent='⏳ CONECTANDO CON ARGENTASLINK…';
+       rb.style.opacity='0.7';
+     }else{
+       rb.disabled=false; rb.textContent=p.state==='CONECTADO'?'🟢 ARGENTASLINK CONECTADO':'🔄 ABRIR Y CONECTAR ARGENTASLINK';
+       rb.style.opacity='1';
+     }
+   }
  }
  if(d.type==='state'&&p.state==='SOLICITUD'){
    var incomingName=p.message||'otro dispositivo';

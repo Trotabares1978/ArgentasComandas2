@@ -19,6 +19,7 @@ import android.net.wifi.p2p.WifiP2pInfo
 import android.net.wifi.p2p.WifiP2pManager
 import android.os.Build
 import android.os.IBinder
+import android.location.LocationManager
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import java.io.BufferedReader
@@ -196,11 +197,21 @@ class ArgentasConnectionService : Service() {
         )
     }
 
+    private fun locationModeEnabled(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return true
+        val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        return lm?.isLocationEnabled == true
+    }
+
     @SuppressLint("MissingPermission")
     private fun setupServiceDiscovery() {
         val manager = p2p ?: return
         val ch = channel ?: return
         if (!hasPermission()) return
+        if (!locationModeEnabled()) {
+            state("ERROR", "Activá Ubicación para que Android permita el descubrimiento Wi-Fi Direct")
+            return
+        }
 
         val txtListener = WifiP2pManager.DnsSdTxtRecordListener { _, record, device ->
             val app = record["app"]?.lowercase(Locale.ROOT)
@@ -279,24 +290,31 @@ class ArgentasConnectionService : Service() {
         manager: WifiP2pManager,
         ch: WifiP2pManager.Channel
     ) {
-        serviceRequest?.let { old ->
-            try {
-                manager.removeServiceRequest(ch, old, object : WifiP2pManager.ActionListener {
-                    override fun onSuccess() {}
-                    override fun onFailure(@Suppress("UNUSED_PARAMETER") reason: Int) {}
-                })
-            } catch (_: Exception) {}
-        }
-        val request = WifiP2pDnsSdServiceRequest.newInstance(
-            "_argentas._tcp"
-        )
+        val request = WifiP2pDnsSdServiceRequest.newInstance("_argentas._tcp")
         serviceRequest = request
+        manager.clearServiceRequests(ch, object : WifiP2pManager.ActionListener {
+            override fun onSuccess() {
+                addServiceRequest(manager, ch, request)
+            }
+            override fun onFailure(@Suppress("UNUSED_PARAMETER") reason: Int) {
+                addServiceRequest(manager, ch, request)
+            }
+        })
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun addServiceRequest(
+        manager: WifiP2pManager,
+        ch: WifiP2pManager.Channel,
+        request: WifiP2pDnsSdServiceRequest
+    ) {
         manager.addServiceRequest(ch, request, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
                 discoverServices(manager, ch)
             }
             override fun onFailure(reason: Int) {
                 state("ERROR", "No se pudo preparar la búsqueda de Argentas ($reason)")
+                scheduleReconnect(3000)
             }
         })
     }
@@ -676,6 +694,9 @@ class ArgentasConnectionService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (p2p == null && hasPermission()) {
+            registerP2P()
+        }
         if (intent != null) handleCommand(intent)
         return START_STICKY
     }

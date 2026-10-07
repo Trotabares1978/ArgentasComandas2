@@ -68,6 +68,8 @@ class ArgentasConnectionService : Service() {
         private const val PREFS = "argentas_p2p"
         private const val LAST_PEER_KEY = "last_peer_address"
         private const val DEVICE_ID_KEY = "device_id"
+        private const val ROLE_CAJA = "caja"
+        private const val ROLE_MOZO = "mozo"
     }
 
     private val io = Executors.newCachedThreadPool()
@@ -81,6 +83,14 @@ class ArgentasConnectionService : Service() {
             prefs.edit().putString(DEVICE_ID_KEY, it).apply()
         }
     }
+
+    private fun deviceRole(): String {
+        // Argentas-Caja runs on the fixed tablet. Android tablets normally
+        // expose a smallest width of 600dp or more; the Moto G52/phones do not.
+        return if (resources.configuration.smallestScreenWidthDp >= 600) ROLE_CAJA else ROLE_MOZO
+    }
+
+    private fun isCajaRegistradora(): Boolean = deviceRole() == ROLE_CAJA
 
     private var p2p: WifiP2pManager? = null
     private var channel: WifiP2pManager.Channel? = null
@@ -150,7 +160,7 @@ class ArgentasConnectionService : Service() {
                     lastHeartbeatAckAt = 0L
                     transport = Transport.WIFI_DIRECT
                     state("DESCONECTADO", "Nearby perdió el enlace; volviendo a buscar…")
-                    scheduleNearbyFallback(1500)
+                    diagnostic("Nearby=DESCONECTADO; no se usa como fallback automático")
                 }
             },
             diagnostic = { msg -> diagnostic(msg) }
@@ -246,7 +256,13 @@ class ArgentasConnectionService : Service() {
             registerReceiver(receiver, filter)
         }
 
-        state("LISTO", "Listo para conexión directa entre Argentas")
+        state(
+            "LISTO",
+            if (isCajaRegistradora())
+                "Argentas Caja: preparando Group Owner fijo…"
+            else
+                "Argentas Mozo: buscando la Caja…"
+        )
         setupServiceDiscovery()
         startDiscoveryLoop()
         requestConnectionInfo()
@@ -291,10 +307,89 @@ class ArgentasConnectionService : Service() {
 
     private fun startDiscoveryLoop() {
         discoveryFuture?.cancel(false)
-        discoveryFuture = reconnect.scheduleAtFixedRate({
-            if (!stopping && !connected && !groupFormed) discover()
-        }, 500, DISCOVERY_INTERVAL_MS, TimeUnit.MILLISECONDS)
-        scheduleNearbyFallback(8000)
+        if (isCajaRegistradora()) {
+            diagnostic("rol=caja; la tablet será Group Owner fijo")
+            discoveryFuture = reconnect.scheduleAtFixedRate({
+                if (!stopping && !connected) ensureCajaGroup()
+            }, 300, DISCOVERY_INTERVAL_MS, TimeUnit.MILLISECONDS)
+        } else {
+            diagnostic("rol=mozo; buscando únicamente la Caja Argentas")
+            discoveryFuture = reconnect.scheduleAtFixedRate({
+                if (!stopping && !connected && !groupFormed) discover()
+            }, 500, DISCOVERY_INTERVAL_MS, TimeUnit.MILLISECONDS)
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun ensureCajaGroup() {
+        if (!isCajaRegistradora() || stopping) return
+        val manager = p2p ?: return
+        val ch = channel ?: return
+        if (!hasPermission() || !wifiEnabled() || !locationModeEnabled()) return
+
+        manager.requestConnectionInfo(ch) { info ->
+            if (info.groupFormed) {
+                groupFormed = true
+                if (!info.isGroupOwner) {
+                    diagnostic("caja=GRUPO_EXISTENTE_PERO_NO_GO; recuperando rol Group Owner")
+                    try {
+                        manager.removeGroup(ch, object : WifiP2pManager.ActionListener {
+                            override fun onSuccess() {
+                                groupFormed = false
+                                scheduleCajaGroupCreate(500)
+                            }
+                            override fun onFailure(reason: Int) {
+                                diagnostic("removeGroup=FALLO(" + reason + "); reintentando createGroup")
+                                scheduleCajaGroupCreate(1500)
+                            }
+                        })
+                    } catch (_: Exception) {
+                        scheduleCajaGroupCreate(1500)
+                    }
+                } else {
+                    diagnostic("caja=GROUP_OWNER_OK")
+                    requestConnectionInfo()
+                }
+                return@requestConnectionInfo
+            }
+            scheduleCajaGroupCreate(0)
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun scheduleCajaGroupCreate(delayMs: Long) {
+        if (stopping || !isCajaRegistradora()) return
+        reconnect.schedule({
+            if (!stopping) createCajaGroup()
+        }, delayMs, TimeUnit.MILLISECONDS)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun createCajaGroup() {
+        if (!isCajaRegistradora() || stopping) return
+        val manager = p2p ?: return
+        val ch = channel ?: return
+        if (!hasPermission() || !wifiEnabled() || !locationModeEnabled()) return
+
+        diagnostic("caja=createGroup; solicitando Group Owner fijo")
+        manager.createGroup(ch, object : WifiP2pManager.ActionListener {
+            override fun onSuccess() {
+                groupFormed = true
+                reconnectAttempt = 0
+                state("BUSCANDO", "Caja lista: esperando teléfonos Argentas…")
+                diagnostic("caja=createGroup=OK; esperando clientes")
+                requestConnectionInfo()
+            }
+
+            override fun onFailure(reason: Int) {
+                diagnostic("caja=createGroup=FALLO(" + reason + ")")
+                if (reason == WifiP2pManager.BUSY) {
+                    scheduleCajaGroupCreate(1500)
+                } else {
+                    scheduleCajaGroupCreate(2500)
+                }
+            }
+        })
     }
 
     private fun locationModeEnabled(): Boolean {
@@ -324,11 +419,14 @@ class ArgentasConnectionService : Service() {
             if (address.isNullOrBlank()) return@DnsSdTxtRecordListener
             val remoteId = record["deviceId"]?.takeIf { it.isNotBlank() }
             if (remoteId == deviceId) return@DnsSdTxtRecordListener
+            val remoteRole = record["role"]?.lowercase(Locale.ROOT)
+            if (!isCajaRegistradora() && remoteRole != ROLE_CAJA) return@DnsSdTxtRecordListener
+            if (isCajaRegistradora() && remoteRole != ROLE_MOZO) return@DnsSdTxtRecordListener
             serviceDeviceIds[address] = remoteId ?: ""
             serviceSeenAt[address] = System.currentTimeMillis()
             val name = record["name"]?.takeIf { it.isNotBlank() }
                 ?: device.deviceName.takeIf { it.isNotBlank() }
-                ?: "Argentas"
+                ?: if (remoteRole == ROLE_CAJA) "Argentas Caja" else "Argentas Mozo"
             serviceAddresses.add(address)
             serviceDevices[address] = name
             devices[address] = name
@@ -361,9 +459,10 @@ class ArgentasConnectionService : Service() {
 
         val record = mapOf(
             "app" to "argentas",
-            "name" to "Argentas",
-            "version" to "2",
+            "name" to if (isCajaRegistradora()) "Argentas Caja" else "Argentas Mozo",
+            "version" to "3",
             "deviceId" to deviceId,
+            "role" to deviceRole(),
             "port" to WIFI_PORT.toString()
         )
         val info = WifiP2pDnsSdServiceInfo.newInstance(
@@ -377,8 +476,13 @@ class ArgentasConnectionService : Service() {
             override fun onSuccess() {
                 manager.addLocalService(ch, info, object : WifiP2pManager.ActionListener {
                     override fun onSuccess() {
-                        diagnostic("addLocalService=OK; servicio=_argentas._tcp")
-                        installServiceRequest(manager, ch)
+                        diagnostic("addLocalService=OK; servicio=_argentas._tcp; role=" + deviceRole())
+                        if (isCajaRegistradora()) {
+                            state("BUSCANDO", "Caja lista: esperando teléfonos Argentas…")
+                            requestConnectionInfo()
+                        } else {
+                            installServiceRequest(manager, ch)
+                        }
                     }
                     override fun onFailure(reason: Int) {
                         diagnostic("addLocalService=FALLO(" + reason + ")")
@@ -389,8 +493,13 @@ class ArgentasConnectionService : Service() {
             override fun onFailure(reason: Int) {
                 manager.addLocalService(ch, info, object : WifiP2pManager.ActionListener {
                     override fun onSuccess() {
-                        diagnostic("addLocalService=OK (fallback); servicio=_argentas._tcp")
-                        installServiceRequest(manager, ch)
+                        diagnostic("addLocalService=OK (fallback); servicio=_argentas._tcp; role=" + deviceRole())
+                        if (isCajaRegistradora()) {
+                            state("BUSCANDO", "Caja lista: esperando teléfonos Argentas…")
+                            requestConnectionInfo()
+                        } else {
+                            installServiceRequest(manager, ch)
+                        }
                     }
                     override fun onFailure(addReason: Int) {
                         diagnostic("addLocalService=FALLO(" + addReason + ") (fallback)")
@@ -445,6 +554,7 @@ class ArgentasConnectionService : Service() {
         manager: WifiP2pManager,
         ch: WifiP2pManager.Channel
     ) {
+        if (isCajaRegistradora()) return
         if (transport == Transport.NEARBY && connected) return
         if (!wifiEnabled() || !locationModeEnabled() || peerDiscoveryRunning) return
         manager.discoverPeers(ch, object : WifiP2pManager.ActionListener {
@@ -466,6 +576,7 @@ class ArgentasConnectionService : Service() {
         manager: WifiP2pManager,
         ch: WifiP2pManager.Channel
     ) {
+        if (isCajaRegistradora()) return
         if (transport == Transport.NEARBY && connected) return
         val now = System.currentTimeMillis()
         if (now - lastServiceDiscoveryAt < SERVICE_DISCOVERY_INTERVAL_MS) return
@@ -517,8 +628,13 @@ class ArgentasConnectionService : Service() {
         val manager = p2p ?: return
         if (!hasPermission()) return
 
-        // La búsqueda de Wi-Fi Direct puede continuar como respaldo, pero
-        // jamás debe forzar una transición mientras Nearby está conectado.
+        if (isCajaRegistradora()) {
+            ensureCajaGroup()
+            return
+        }
+
+        // El teléfono busca exclusivamente la Caja Argentas; Nearby no
+        // participa en la reconexión automática de producción.
         if (transport == Transport.NEARBY && connected) {
             diagnostic("discover=IGNORADO; Nearby es el transporte activo")
             return
@@ -558,7 +674,12 @@ class ArgentasConnectionService : Service() {
     private fun connectP2P(address: String, automatic: Boolean = false) {
         val manager = p2p ?: return
         val ch = channel ?: return
+        if (isCajaRegistradora()) {
+            diagnostic("connect=IGNORADO; la Caja nunca inicia conexiones")
+            return
+        }
         if (address.isBlank() || connected || !serviceAddresses.contains(address)) return
+        if (serviceDeviceIds[address].isNullOrBlank()) return
         if (groupFormed) {
             requestConnectionInfo()
             return
@@ -574,12 +695,11 @@ class ArgentasConnectionService : Service() {
             "Conectando directamente con el dispositivo elegido…"
         })
 
-        val remoteId = serviceDeviceIds[address].orEmpty()
         val config = WifiP2pConfig().apply {
             deviceAddress = address
-            // Deterministic GO preference prevents both phones from racing
-            // to become group owner when they reconnect at the same time.
-            groupOwnerIntent = if (remoteId.isNotBlank() && deviceId < remoteId) 15 else 0
+            // The discovered peer is the fixed Argentas Caja / Group Owner.
+            // The waiter device must join that group, never compete for GO.
+            groupOwnerIntent = 0
         }
 
         manager.connect(ch, config, object : WifiP2pManager.ActionListener {
@@ -590,7 +710,6 @@ class ArgentasConnectionService : Service() {
             override fun onFailure(reason: Int) {
                 state("DESCONECTADO", "Wi-Fi Direct no pudo conectar ($reason)")
                 scheduleReconnect(2000)
-                scheduleNearbyFallback(2500)
             }
         })
     }
@@ -621,53 +740,61 @@ class ArgentasConnectionService : Service() {
         val ch = channel ?: return
         if (!hasPermission()) return
 
-        // Si Nearby ya es el transporte activo, los callbacks transitorios
-        // de Wi-Fi Direct no deben derribarlo. Wi-Fi Direct puede seguir
-        // descubriendo en segundo plano, pero no tiene autoridad para cerrar
-        // un enlace Nearby ya autenticado.
         if (transport == Transport.NEARBY && connected) {
-            diagnostic("wifi_direct=IGNORADO; Nearby es el transporte activo")
+            diagnostic("wifi_direct=IGNORADO; Nearby es solo prueba manual")
             return
         }
 
         manager.requestConnectionInfo(ch) { info: WifiP2pInfo ->
-            // Puede cambiar de transporte mientras llega este callback.
-            // Volvemos a comprobarlo para no cerrar Nearby por un estado P2P
-            // transitorio o por un grupo que todavía no se formó.
             if (transport == Transport.NEARBY && connected) {
-                diagnostic("wifi_direct=CALLBACK_IGNORADO; Nearby es el transporte activo")
+                diagnostic("wifi_direct=CALLBACK_IGNORADO; Nearby es solo prueba manual")
                 return@requestConnectionInfo
             }
 
             if (!info.groupFormed) {
-                // Some ROMs emit transient "not formed" callbacks while the
-                // existing TCP channel is still alive. Never tear down a live
-                // transport because of that transient P2P notification.
-                if (connected && socketIsAlive()) {
-                    return@requestConnectionInfo
-                }
+                if (connected && socketIsAlive()) return@requestConnectionInfo
                 val wasGroup = groupFormed
                 groupFormed = false
-                if (connected) {
-                    closeTransport()
-                    state("DESCONECTADO", "La conexión directa se cerró; buscando reconexión…")
-                } else if (wasGroup) {
-                    state("BUSCANDO", "El enlace Wi-Fi Direct se perdió; buscando reconexión…")
+                if (isCajaRegistradora()) {
+                    if (wasGroup) state("BUSCANDO", "La Caja perdió el grupo; reconstruyendo…")
+                    scheduleCajaGroupCreate(500)
+                } else {
+                    if (connected) {
+                        closeTransport()
+                        state("DESCONECTADO", "La conexión directa se cerró; buscando la Caja…")
+                    } else if (wasGroup) {
+                        state("BUSCANDO", "El enlace Wi-Fi Direct se perdió; buscando la Caja…")
+                    }
+                    scheduleReconnect(800)
                 }
-                scheduleReconnect(800)
                 return@requestConnectionInfo
             }
 
             groupFormed = true
             rememberPeerFromGroup(manager, ch)
 
+            if (isCajaRegistradora() && !info.isGroupOwner) {
+                diagnostic("caja=NO_ES_GO; forzando recuperación del grupo")
+                scheduleCajaGroupCreate(500)
+                return@requestConnectionInfo
+            }
+
             if (connected && socketIsAlive()) {
-                state("CONECTADO", "Conectado directamente con otro Argentas")
+                state("CONECTADO", if (isCajaRegistradora())
+                    "Caja conectada con un Argentas"
+                else
+                    "Conectado directamente con la Caja")
                 return@requestConnectionInfo
             }
 
             if (info.isGroupOwner) {
-                startServer()
+                if (isCajaRegistradora()) {
+                    startServer()
+                    state("BUSCANDO", "Caja lista: esperando teléfonos Argentas…")
+                } else {
+                    diagnostic("peer=GO_NO_ESPERADO; buscando una Caja")
+                    scheduleReconnect(500)
+                }
             } else {
                 info.groupOwnerAddress?.let { connectSocketWithRetry(it) }
             }
@@ -751,7 +878,6 @@ class ArgentasConnectionService : Service() {
             if (!established && !connected && !stopping) {
                 diagnostic("tcp=FALLO; agotados 5 intentos; grupo=" + groupFormed)
                 scheduleReconnect(1000)
-                scheduleNearbyFallback(1500)
             }
         }
     }
@@ -970,17 +1096,20 @@ class ArgentasConnectionService : Service() {
     private fun scheduleReconnect(delayMs: Long = 1500) {
         if (stopping || reconnectScheduled || connected) return
         reconnectScheduled = true
-        val backoffDelay = minOf(
+        val baseDelay = minOf(
             MAX_RECONNECT_DELAY_MS,
-            2000L * (1L shl minOf(reconnectAttempt, 5))
+            1000L * (1L shl minOf(reconnectAttempt, 5))
         )
-        val effectiveDelay = maxOf(delayMs, backoffDelay)
+        val jitter = java.util.concurrent.ThreadLocalRandom.current().nextLong(0L, 1001L)
+        val effectiveDelay = maxOf(delayMs, baseDelay + jitter)
         reconnectAttempt = minOf(reconnectAttempt + 1, 5)
-        diagnostic("reconnect=programado; intento=" + reconnectAttempt + "; espera=" + effectiveDelay + " ms")
+        diagnostic("reconnect=programado; intento=" + reconnectAttempt + "; espera=" + effectiveDelay + " ms (jitter)")
         reconnect.schedule({
             reconnectScheduled = false
             if (!stopping && !connected) {
-                if (groupFormed) {
+                if (isCajaRegistradora()) {
+                    ensureCajaGroup()
+                } else if (groupFormed) {
                     requestConnectionInfo()
                 } else {
                     discover()
@@ -994,7 +1123,7 @@ class ArgentasConnectionService : Service() {
             "refresh" -> discover()
             "test_nearby" -> nearbyManager?.start()
             "start_server", "accept_incoming", "request_state" -> requestConnectionInfo()
-            "connect" -> intent.getStringExtra(EXTRA_ADDRESS)?.let { connectP2P(it) }
+            "connect" -> if (!isCajaRegistradora()) intent.getStringExtra(EXTRA_ADDRESS)?.let { connectP2P(it) }
             "reject_incoming" -> closeTransport()
             "send" -> intent.getStringExtra(EXTRA_MESSAGE)?.let { sendMessage(it) }
         }

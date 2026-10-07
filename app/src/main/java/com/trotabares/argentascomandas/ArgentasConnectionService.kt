@@ -60,6 +60,7 @@ class ArgentasConnectionService : Service() {
         private const val WIFI_PORT = 8988
         private const val DISCOVERY_INTERVAL_MS = 5000L
         private const val SERVICE_STALE_MS = 15000L
+        private const val SERVICE_DISCOVERY_INTERVAL_MS = 15000L
         private const val HEARTBEAT_INTERVAL_MS = 3000L
         private const val SOCKET_READ_TIMEOUT_MS = 10000
         private const val PREFS = "argentas_p2p"
@@ -90,6 +91,7 @@ class ArgentasConnectionService : Service() {
     private var localService: WifiP2pDnsSdServiceInfo? = null
     private var serviceRequest: WifiP2pDnsSdServiceRequest? = null
     private var lastPeerCount = -1
+    @Volatile private var lastServiceDiscoveryAt = 0L
     @Volatile private var serviceReady = false
     @Volatile private var peerDiscoveryRunning = false
 
@@ -158,6 +160,7 @@ class ArgentasConnectionService : Service() {
                         if (!enabled) {
                             serviceReady = false
                             peerDiscoveryRunning = false
+                            lastServiceDiscoveryAt = 0L
                             closeTransport()
                             state("ERROR", "Activá Wi-Fi para usar la conexión directa")
                         } else if (connected && socketIsAlive()) {
@@ -219,6 +222,7 @@ class ArgentasConnectionService : Service() {
                     channel = null
                     serviceReady = false
                     peerDiscoveryRunning = false
+                    lastServiceDiscoveryAt = 0L
                     closeTransport()
                     state("ERROR", "Wi-Fi Direct perdió el canal; reiniciando el enlace…")
                     reconnectScheduled = false
@@ -431,6 +435,7 @@ class ArgentasConnectionService : Service() {
                 diagnostic("discoverServices=OK; peers=" + lastPeerCount)
             }
             override fun onFailure(reason: Int) {
+                lastServiceDiscoveryAt = 0L
                 diagnostic("discoverServices=FALLO(" + reason + "); peers=" + lastPeerCount)
                 state("ERROR", "No se pudo buscar Argentas por Wi-Fi Direct (" + reason + ")")
                 scheduleReconnect(3000)

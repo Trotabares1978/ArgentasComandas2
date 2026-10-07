@@ -72,7 +72,7 @@ window.argentasCustomizeProduct=function(product,onAdd){
   var id=String(product&&product.id||'');
   var customIds=['h1','h2','h3','h4','m1','m1q','m2','m2q'];
   if(customIds.indexOf(id)<0)return false;
-  var hasCheese=['h1','h2','h3','h4','m1q','m2q'].indexOf(id)>=0;var cheeseRequired=['m1q','m2q'].indexOf(id)>=0;
+  var hasCheese=['h1','h2','h3','h4','m1q','m2q'].indexOf(id)>=0;var cheeseRequired=hasCheese;
   var old=document.getElementById('argentas-v-custom-modal');if(old)old.remove();
   var m=document.createElement('div');m.id='argentas-v-custom-modal';
   m.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center;padding:18px';
@@ -94,7 +94,7 @@ window.argentasCustomizeProduct=function(product,onAdd){
     var cheese='';var q=m.querySelector('input[name="av-cheese"]:checked');if(q)cheese=q.value;
     var parts=[];if(m.querySelector('#av-no-lechuga').checked)parts.push('sin lechuga');if(m.querySelector('#av-no-tomate').checked)parts.push('sin tomate');
     if(cheese==='provoleta')parts.push('Provoleta');else if(cheese==='cheddar')parts.push('Cheddar');else if(cheese==='none')parts.push('sin queso');
-    if(cheeseRequired&&!cheese)cheese='cheddar';if(cheeseRequired&&parts.indexOf('Cheddar')<0&&parts.indexOf('Provoleta')<0)parts.push(cheese==='provoleta'?'Provoleta':'Cheddar');var custom={noLechuga:m.querySelector('#av-no-lechuga').checked,noTomate:m.querySelector('#av-no-tomate').checked,cheese:cheese,note:parts.length?'('+parts.join(' · ')+')':'',key:JSON.stringify({noLechuga:m.querySelector('#av-no-lechuga').checked,noTomate:m.querySelector('#av-no-tomate').checked,cheese:cheese})};
+    if(cheeseRequired&&!cheese){alert('Seleccioná una opción de queso para este producto. Podés elegir Cheddar, Provoleta o Sin queso.');return;}var custom={noLechuga:m.querySelector('#av-no-lechuga').checked,noTomate:m.querySelector('#av-no-tomate').checked,cheese:cheese,note:parts.length?'('+parts.join(' · ')+')':'',key:JSON.stringify({noLechuga:m.querySelector('#av-no-lechuga').checked,noTomate:m.querySelector('#av-no-tomate').checked,cheese:cheese})};
     close();onAdd(custom);
   };
   return true;

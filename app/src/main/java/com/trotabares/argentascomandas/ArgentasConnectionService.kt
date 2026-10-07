@@ -485,7 +485,16 @@ class ArgentasConnectionService : Service() {
             devices[address] = name
             publishDevices()
             val last = prefs.getString(LAST_PEER_KEY, null)
-            if (!connected && !groupFormed && address == last) {
+            if (!connected && !groupFormed) {
+                // La primera conexión no puede depender de LAST_PEER_KEY:
+                // en una instalación nueva todavía no existe un peer recordado.
+                // El TXT ya verificó que el servicio pertenece a Argentas y que
+                // el remoto es la Caja, así que Cocina puede iniciar el enlace.
+                val preferred = address == last
+                diagnostic(
+                    "caja_detectada=SI; direccion=" + address +
+                        "; preferida=" + preferred + "; iniciando conexión"
+                )
                 connectP2P(address, automatic = true)
             }
         }
@@ -503,8 +512,10 @@ class ArgentasConnectionService : Service() {
             devices[address] = name
             publishDevices()
             val last = prefs.getString(LAST_PEER_KEY, null)
-            if (!connected && !groupFormed && address == last) {
-                connectP2P(address, automatic = true)
+            if (!connected && !groupFormed && serviceDeviceIds[address].isNullOrBlank()) {
+                // Si llega la respuesta de servicio antes que el TXT, todavía
+                // esperamos el TXT para validar app/rol antes de conectar.
+                diagnostic("servicio_argentas_detectado; esperando TXT para validar Caja")
             }
         }
 

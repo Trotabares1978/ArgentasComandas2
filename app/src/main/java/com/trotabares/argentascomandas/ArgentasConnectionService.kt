@@ -445,6 +445,7 @@ class ArgentasConnectionService : Service() {
         manager: WifiP2pManager,
         ch: WifiP2pManager.Channel
     ) {
+        if (transport == Transport.NEARBY && connected) return
         if (!wifiEnabled() || !locationModeEnabled() || peerDiscoveryRunning) return
         manager.discoverPeers(ch, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
@@ -465,6 +466,7 @@ class ArgentasConnectionService : Service() {
         manager: WifiP2pManager,
         ch: WifiP2pManager.Channel
     ) {
+        if (transport == Transport.NEARBY && connected) return
         val now = System.currentTimeMillis()
         if (now - lastServiceDiscoveryAt < SERVICE_DISCOVERY_INTERVAL_MS) return
         lastServiceDiscoveryAt = now
@@ -514,6 +516,14 @@ class ArgentasConnectionService : Service() {
     private fun discover() {
         val manager = p2p ?: return
         if (!hasPermission()) return
+
+        // La búsqueda de Wi-Fi Direct puede continuar como respaldo, pero
+        // jamás debe forzar una transición mientras Nearby está conectado.
+        if (transport == Transport.NEARBY && connected) {
+            diagnostic("discover=IGNORADO; Nearby es el transporte activo")
+            return
+        }
+
         if (channel == null) {
             initializeP2PChannel(manager)
             scheduleReconnect(500)
@@ -611,7 +621,24 @@ class ArgentasConnectionService : Service() {
         val ch = channel ?: return
         if (!hasPermission()) return
 
+        // Si Nearby ya es el transporte activo, los callbacks transitorios
+        // de Wi-Fi Direct no deben derribarlo. Wi-Fi Direct puede seguir
+        // descubriendo en segundo plano, pero no tiene autoridad para cerrar
+        // un enlace Nearby ya autenticado.
+        if (transport == Transport.NEARBY && connected) {
+            diagnostic("wifi_direct=IGNORADO; Nearby es el transporte activo")
+            return
+        }
+
         manager.requestConnectionInfo(ch) { info: WifiP2pInfo ->
+            // Puede cambiar de transporte mientras llega este callback.
+            // Volvemos a comprobarlo para no cerrar Nearby por un estado P2P
+            // transitorio o por un grupo que todavía no se formó.
+            if (transport == Transport.NEARBY && connected) {
+                diagnostic("wifi_direct=CALLBACK_IGNORADO; Nearby es el transporte activo")
+                return@requestConnectionInfo
+            }
+
             if (!info.groupFormed) {
                 // Some ROMs emit transient "not formed" callbacks while the
                 // existing TCP channel is still alive. Never tear down a live

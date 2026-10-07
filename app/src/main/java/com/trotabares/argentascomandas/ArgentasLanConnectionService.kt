@@ -81,8 +81,10 @@ class ArgentasLanConnectionService : Service() {
     private val writer = Executors.newSingleThreadExecutor()
     private var wakeLock: PowerManager.WakeLock? = null
 
+    // Algunas tablets reportan menos de 600dp de ancho mínimo según su densidad/resolución.
+    // 480dp sigue separando de forma segura los teléfonos habituales de las tablets.
     private fun isCaja(): Boolean =
-        resources.configuration.smallestScreenWidthDp >= 600
+        resources.configuration.smallestScreenWidthDp >= 480
 
     override fun onCreate() {
         super.onCreate()

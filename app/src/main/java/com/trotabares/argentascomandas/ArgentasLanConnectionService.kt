@@ -13,11 +13,12 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.DatagramPacket
 import java.net.DatagramSocket
+import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.net.NetworkInterface
 import java.net.ServerSocket
 import java.net.Socket
-import java.net.SocketException
 import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
@@ -117,7 +118,6 @@ class ArgentasLanConnectionService : Service() {
             "reject_incoming" -> closeConnection("rechazado")
             "send" -> intent.getStringExtra(EXTRA_MESSAGE)?.let { sendRaw(it) }
             "test_nearby", "nearby_stop" -> {
-                // Compatibilidad con la interfaz existente. No se utiliza Nearby.
                 diagnostic("comando=test_nearby ignorado; transporte=LAN")
             }
         }
@@ -173,6 +173,7 @@ class ArgentasLanConnectionService : Service() {
         ds.reuseAddress = true
         ds.bind(InetSocketAddress(UDP_PORT))
         discoverySocket = ds
+        diagnostic("udp servidor LAN listo en puerto $UDP_PORT")
         val buf = ByteArray(1024)
         val packet = DatagramPacket(buf, buf.size)
         while (!stopping && !ds.isClosed) {
@@ -183,6 +184,7 @@ class ArgentasLanConnectionService : Service() {
                 if (text.startsWith(DISCOVERY_MAGIC + "|")) {
                     val parts = text.split("|")
                     if (parts.size >= 3 && parts[1] != deviceId && parts[2] == "COCINA") {
+                        diagnostic("udp cocina detectada desde " + (packet.address?.hostAddress ?: "?"))
                         sendDiscoveryReply(ds, packet.address)
                     }
                 }
@@ -196,7 +198,10 @@ class ArgentasLanConnectionService : Service() {
         try {
             val msg = "$DISCOVERY_MAGIC|$deviceId|CAJA".toByteArray(Charsets.UTF_8)
             ds.send(DatagramPacket(msg, msg.size, address, UDP_PORT))
-        } catch (_: Exception) {}
+            diagnostic("udp respuesta enviada a " + (address.hostAddress ?: "?"))
+        } catch (e: Exception) {
+            diagnostic("udp respuesta error=" + (e.message ?: e.javaClass.simpleName))
+        }
     }
 
     private fun discoverCajaLoop() {
@@ -208,28 +213,62 @@ class ArgentasLanConnectionService : Service() {
         }
     }
 
+    /**
+     * Obtiene los broadcasts reales de las interfaces IPv4 activas.
+     * Esto evita depender de rangos fijos como 192.168.43.x o 192.168.1.x,
+     * que no coinciden con todos los hotspots, routers y tablets.
+     */
+    private fun localBroadcastAddresses(): List<InetAddress> {
+        val result = LinkedHashSet<String>()
+        try {
+            val interfaces = NetworkInterface.getNetworkInterfaces()
+            while (interfaces.hasMoreElements()) {
+                val networkInterface = interfaces.nextElement()
+                if (!networkInterface.isUp || networkInterface.isLoopback || networkInterface.isVirtual) continue
+                for (entry in networkInterface.interfaceAddresses) {
+                    val address = entry.address
+                    val broadcast = entry.broadcast
+                    if (address is Inet4Address && broadcast is Inet4Address) {
+                        result.add(broadcast.hostAddress ?: continue)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            diagnostic("interfaces LAN error=" + (e.message ?: e.javaClass.simpleName))
+        }
+        return result.mapNotNull {
+            try { InetAddress.getByName(it) } catch (_: Exception) { null }
+        }
+    }
+
     private fun broadcastDiscovery() {
         var ds: DatagramSocket? = null
         try {
             ds = DatagramSocket()
             ds.broadcast = true
             val msg = "$DISCOVERY_MAGIC|$deviceId|COCINA".toByteArray(Charsets.UTF_8)
-            val packet = DatagramPacket(msg, msg.size, InetAddress.getByName("255.255.255.255"), UDP_PORT)
-            ds.send(packet)
 
-            // Algunos hotspots no propagan 255.255.255.255 correctamente.
-            // También probamos las redes IPv4 privadas habituales sin depender
-            // de una IP fija del teléfono que comparte Internet.
-            listOf(
-                "192.168.43.255",
-                "192.168.42.255",
-                "192.168.137.255",
-                "192.168.1.255",
-                "192.168.0.255"
-            ).forEach {
+            val targets = LinkedHashSet<String>()
+            targets.add("255.255.255.255")
+            localBroadcastAddresses().forEach { address ->
+                address.hostAddress?.let { targets.add(it) }
+            }
+
+            diagnostic("udp búsqueda por " + targets.joinToString(","))
+
+            for (target in targets) {
                 try {
-                    ds.send(DatagramPacket(msg, msg.size, InetAddress.getByName(it), UDP_PORT))
-                } catch (_: Exception) {}
+                    ds.send(
+                        DatagramPacket(
+                            msg,
+                            msg.size,
+                            InetAddress.getByName(target),
+                            UDP_PORT
+                        )
+                    )
+                } catch (e: Exception) {
+                    diagnostic("udp envío a $target falló=" + (e.message ?: e.javaClass.simpleName))
+                }
             }
 
             ds.soTimeout = 350
@@ -245,6 +284,7 @@ class ArgentasLanConnectionService : Service() {
                         text.startsWith("$DISCOVERY_MAGIC|") && text.endsWith("|CAJA")) {
                         val ip = reply.address.hostAddress ?: continue
                         lastPeerIp = ip
+                        diagnostic("caja encontrada en $ip")
                         connectTo(ip)
                         return
                     }

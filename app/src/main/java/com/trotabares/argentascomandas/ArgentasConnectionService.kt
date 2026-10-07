@@ -69,7 +69,7 @@ class ArgentasConnectionService : Service() {
         private const val LAST_PEER_KEY = "last_peer_address"
         private const val DEVICE_ID_KEY = "device_id"
         private const val ROLE_CAJA = "caja"
-        private const val ROLE_MOZO = "mozo"
+        private const val ROLE_COCINA = "cocina"
     }
 
     private val io = Executors.newCachedThreadPool()
@@ -87,10 +87,15 @@ class ArgentasConnectionService : Service() {
     private fun deviceRole(): String {
         // Argentas-Caja runs on the fixed tablet. Android tablets normally
         // expose a smallest width of 600dp or more; the Moto G52/phones do not.
-        return if (resources.configuration.smallestScreenWidthDp >= 600) ROLE_CAJA else ROLE_MOZO
+        return if (resources.configuration.smallestScreenWidthDp >= 600) ROLE_CAJA else ROLE_COCINA
     }
 
     private fun isCajaRegistradora(): Boolean = deviceRole() == ROLE_CAJA
+    private fun diagnosticRole() {
+        val sw = resources.configuration.smallestScreenWidthDp
+        diagnostic("rol=" + deviceRole() + "; smallestWidthDp=" + sw + "; cajaFija=" + isCajaRegistradora())
+    }
+
 
     private var p2p: WifiP2pManager? = null
     private var channel: WifiP2pManager.Channel? = null
@@ -261,8 +266,9 @@ class ArgentasConnectionService : Service() {
             if (isCajaRegistradora())
                 "Argentas Caja: preparando Group Owner fijo…"
             else
-                "Argentas Mozo: buscando la Caja…"
+                "Argentas Cocina: buscando la Caja…"
         )
+        diagnosticRole()
         setupServiceDiscovery()
         startDiscoveryLoop()
         requestConnectionInfo()
@@ -313,10 +319,56 @@ class ArgentasConnectionService : Service() {
                 if (!stopping && !connected) ensureCajaGroup()
             }, 300, DISCOVERY_INTERVAL_MS, TimeUnit.MILLISECONDS)
         } else {
-            diagnostic("rol=mozo; buscando únicamente la Caja Argentas")
+            diagnostic("rol=cocina; buscando únicamente la Caja Argentas")
             discoveryFuture = reconnect.scheduleAtFixedRate({
-                if (!stopping && !connected && !groupFormed) discover()
+                if (!stopping && !connected) {
+                    if (groupFormed) {
+                        ensureCocinaSinGrupo()
+                    } else {
+                        discover()
+                    }
+                }
             }, 500, DISCOVERY_INTERVAL_MS, TimeUnit.MILLISECONDS)
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun ensureCocinaSinGrupo() {
+        if (isCajaRegistradora() || stopping || connected) return
+        val manager = p2p ?: return
+        val ch = channel ?: return
+        if (!hasPermission()) return
+
+        manager.requestConnectionInfo(ch) { info ->
+            if (!info.groupFormed) {
+                groupFormed = false
+                diagnostic("cocina=LIBRE; sin grupo P2P; iniciando búsqueda de Caja")
+                discover()
+                return@requestConnectionInfo
+            }
+
+            diagnostic("cocina=GRUPO_P2P_EXISTENTE; GO=" + info.isGroupOwner + "; eliminando grupo previo")
+            try {
+                manager.removeGroup(ch, object : WifiP2pManager.ActionListener {
+                    override fun onSuccess() {
+                        groupFormed = false
+                        serviceReady = false
+                        lastServiceDiscoveryAt = 0L
+                        diagnostic("cocina=GRUPO_PREVIO_ELIMINADO; buscando Caja")
+                        scheduleReconnect(300)
+                    }
+
+                    override fun onFailure(reason: Int) {
+                        diagnostic("cocina=REMOVE_GROUP_FALLO(" + reason + "); reintentando")
+                        groupFormed = false
+                        scheduleReconnect(1500)
+                    }
+                })
+            } catch (e: Exception) {
+                diagnostic("cocina=REMOVE_GROUP_EXCEPCION;" + (e.message ?: "sin detalle"))
+                groupFormed = false
+                scheduleReconnect(1500)
+            }
         }
     }
 
@@ -348,6 +400,7 @@ class ArgentasConnectionService : Service() {
                     }
                 } else {
                     diagnostic("caja=GROUP_OWNER_OK")
+                    requestGroupMembershipDiagnostic(manager, ch)
                     requestConnectionInfo()
                 }
                 return@requestConnectionInfo
@@ -376,7 +429,7 @@ class ArgentasConnectionService : Service() {
             override fun onSuccess() {
                 groupFormed = true
                 reconnectAttempt = 0
-                state("BUSCANDO", "Caja lista: esperando teléfonos Argentas…")
+                state("BUSCANDO", "Caja lista: esperando celulares Cocina Argentas…")
                 diagnostic("caja=createGroup=OK; esperando clientes")
                 requestConnectionInfo()
             }
@@ -421,12 +474,12 @@ class ArgentasConnectionService : Service() {
             if (remoteId == deviceId) return@DnsSdTxtRecordListener
             val remoteRole = record["role"]?.lowercase(Locale.ROOT)
             if (!isCajaRegistradora() && remoteRole != ROLE_CAJA) return@DnsSdTxtRecordListener
-            if (isCajaRegistradora() && remoteRole != ROLE_MOZO) return@DnsSdTxtRecordListener
+            if (isCajaRegistradora() && remoteRole != ROLE_COCINA) return@DnsSdTxtRecordListener
             serviceDeviceIds[address] = remoteId ?: ""
             serviceSeenAt[address] = System.currentTimeMillis()
             val name = record["name"]?.takeIf { it.isNotBlank() }
                 ?: device.deviceName.takeIf { it.isNotBlank() }
-                ?: if (remoteRole == ROLE_CAJA) "Argentas Caja" else "Argentas Mozo"
+                ?: if (remoteRole == ROLE_CAJA) "Argentas Caja" else "Argentas Cocina"
             serviceAddresses.add(address)
             serviceDevices[address] = name
             devices[address] = name
@@ -459,7 +512,7 @@ class ArgentasConnectionService : Service() {
 
         val record = mapOf(
             "app" to "argentas",
-            "name" to if (isCajaRegistradora()) "Argentas Caja" else "Argentas Mozo",
+            "name" to if (isCajaRegistradora()) "Argentas Caja" else "Argentas Cocina",
             "version" to "3",
             "deviceId" to deviceId,
             "role" to deviceRole(),
@@ -478,7 +531,7 @@ class ArgentasConnectionService : Service() {
                     override fun onSuccess() {
                         diagnostic("addLocalService=OK; servicio=_argentas._tcp; role=" + deviceRole())
                         if (isCajaRegistradora()) {
-                            state("BUSCANDO", "Caja lista: esperando teléfonos Argentas…")
+                            state("BUSCANDO", "Caja lista: esperando celulares Cocina Argentas…")
                             requestConnectionInfo()
                         } else {
                             installServiceRequest(manager, ch)
@@ -495,7 +548,7 @@ class ArgentasConnectionService : Service() {
                     override fun onSuccess() {
                         diagnostic("addLocalService=OK (fallback); servicio=_argentas._tcp; role=" + deviceRole())
                         if (isCajaRegistradora()) {
-                            state("BUSCANDO", "Caja lista: esperando teléfonos Argentas…")
+                            state("BUSCANDO", "Caja lista: esperando celulares Cocina Argentas…")
                             requestConnectionInfo()
                         } else {
                             installServiceRequest(manager, ch)
@@ -617,8 +670,11 @@ class ArgentasConnectionService : Service() {
                 val name = it.deviceName.takeIf { n -> n.isNotBlank() } ?: "sin nombre"
                 name + " [" + it.deviceAddress + "]"
             }
-            diagnostic("requestPeers: " + peers.size + " dispositivo(s)" +
-                if (names.isNotBlank()) " → " + names else " → ninguno")
+            diagnostic(
+                "requestPeers: " + peers.size + " dispositivo(s)" +
+                if (names.isNotBlank()) " → " + names else " → ninguno" +
+                "; rol=" + deviceRole()
+            )
             publishDevices()
         }
     }
@@ -633,7 +689,7 @@ class ArgentasConnectionService : Service() {
             return
         }
 
-        // El teléfono busca exclusivamente la Caja Argentas; Nearby no
+        // El celular busca exclusivamente la Caja Argentas; Nearby no
         // participa en la reconexión automática de producción.
         if (transport == Transport.NEARBY && connected) {
             diagnostic("discover=IGNORADO; Nearby es el transporte activo")
@@ -643,6 +699,10 @@ class ArgentasConnectionService : Service() {
         if (channel == null) {
             initializeP2PChannel(manager)
             scheduleReconnect(500)
+            return
+        }
+        if (groupFormed) {
+            ensureCocinaSinGrupo()
             return
         }
         if (!serviceReady) {
@@ -715,6 +775,28 @@ class ArgentasConnectionService : Service() {
     }
 
     @SuppressLint("MissingPermission")
+    private fun requestGroupMembershipDiagnostic(
+        manager: WifiP2pManager,
+        ch: WifiP2pManager.Channel
+    ) {
+        try {
+            manager.requestGroupInfo(ch) { group ->
+                val clients = group.clientList.joinToString(" | ") {
+                    (it.deviceName.takeIf { n -> n.isNotBlank() } ?: "sin nombre") +
+                        " [" + it.deviceAddress + "]"
+                }
+                diagnostic(
+                    "caja=GRUPO_INFO; GO=" + group.isGroupOwner +
+                        "; clientes=" + group.clientList.size +
+                        if (clients.isNotBlank()) " → " + clients else " → ninguno"
+                )
+            }
+        } catch (e: Exception) {
+            diagnostic("caja=GRUPO_INFO_FALLO;" + (e.message ?: "sin detalle"))
+        }
+    }
+
+    @SuppressLint("MissingPermission")
     private fun rememberPeerFromGroup(
         manager: WifiP2pManager,
         ch: WifiP2pManager.Channel
@@ -771,6 +853,7 @@ class ArgentasConnectionService : Service() {
             }
 
             groupFormed = true
+            diagnostic("P2P=GRUPO_FORMADO; rol=" + deviceRole() + "; groupOwner=" + info.isGroupOwner)
             rememberPeerFromGroup(manager, ch)
 
             if (isCajaRegistradora() && !info.isGroupOwner) {
@@ -790,7 +873,7 @@ class ArgentasConnectionService : Service() {
             if (info.isGroupOwner) {
                 if (isCajaRegistradora()) {
                     startServer()
-                    state("BUSCANDO", "Caja lista: esperando teléfonos Argentas…")
+                    state("BUSCANDO", "Caja lista: esperando celulares Cocina Argentas…")
                 } else {
                     diagnostic("peer=GO_NO_ESPERADO; buscando una Caja")
                     scheduleReconnect(500)

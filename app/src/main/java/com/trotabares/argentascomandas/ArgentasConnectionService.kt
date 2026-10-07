@@ -14,6 +14,9 @@ import android.content.pm.PackageManager
 import android.net.wifi.p2p.WifiP2pConfig
 import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pDeviceList
+import android.net.wifi.p2p.WifiP2pDnsSdServiceInfo
+import android.net.wifi.p2p.WifiP2pDnsSdServiceRequest
+import java.util.Locale
 import android.net.wifi.p2p.WifiP2pInfo
 import android.net.wifi.p2p.WifiP2pManager
 import android.os.Build
@@ -66,6 +69,10 @@ class ArgentasConnectionService : Service() {
     private var channel: WifiP2pManager.Channel? = null
     private var receiver: BroadcastReceiver? = null
     private val devices = linkedMapOf<String, String>()
+    private val serviceDevices = linkedMapOf<String, String>()
+    private val serviceAddresses = mutableSetOf<String>()
+    private var localService: WifiP2pDnsSdServiceInfo? = null
+    private var serviceRequest: WifiP2pDnsSdServiceRequest? = null
 
     @Volatile private var socket: Socket? = null
     @Volatile private var server: ServerSocket? = null
@@ -169,6 +176,7 @@ class ArgentasConnectionService : Service() {
         }
 
         state("LISTO", "Listo para conexión directa entre Argentas")
+        setupServiceDiscovery()
         requestConnectionInfo()
     }
 
@@ -178,27 +186,123 @@ class ArgentasConnectionService : Service() {
     }
 
     @SuppressLint("MissingPermission")
-    private fun requestPeers() {
+    private fun setupServiceDiscovery() {
         val manager = p2p ?: return
         val ch = channel ?: return
         if (!hasPermission()) return
 
-        manager.requestPeers(ch) { list: WifiP2pDeviceList ->
-            devices.clear()
-            list.deviceList
-                .filter { it.deviceAddress.isNotBlank() }
-                .forEach { device ->
-                    devices[device.deviceAddress] =
-                        device.deviceName.ifBlank { "Dispositivo Wi-Fi Direct" }
-                }
+        val txtListener = WifiP2pManager.DnsSdTxtRecordListener { _, record, device ->
+            val app = record["app"]?.lowercase(Locale.ROOT)
+            if (app != "argentas") return@DnsSdTxtRecordListener
+            val address = device.deviceAddress
+            if (address.isNullOrBlank()) return@DnsSdTxtRecordListener
+            val name = record["name"]?.takeIf { it.isNotBlank() }
+                ?: device.deviceName.takeIf { it.isNotBlank() }
+                ?: "Argentas"
+            serviceAddresses.add(address)
+            serviceDevices[address] = name
+            devices[address] = name
             publishDevices()
-
             val last = prefs.getString(LAST_PEER_KEY, null)
-            if (!connected && !groupFormed && !last.isNullOrBlank()) {
-                val found = devices.containsKey(last)
-                if (found) connectP2P(last, automatic = true)
+            if (!connected && !groupFormed && address == last) {
+                connectP2P(address, automatic = true)
             }
         }
+
+        val serviceListener = WifiP2pManager.DnsSdServiceResponseListener {
+                _, registrationType, device ->
+            if (registrationType == "_argentas._tcp") {
+                serviceAddresses.add(device.deviceAddress)
+            }
+        }
+
+        manager.setDnsSdResponseListeners(ch, serviceListener, txtListener)
+
+        val record = mapOf(
+            "app" to "argentas",
+            "name" to "Argentas",
+            "version" to "1"
+        )
+        val info = WifiP2pDnsSdServiceInfo.newInstance(
+            "Argentas",
+            "_argentas._tcp",
+            record
+        )
+        localService = info
+
+        manager.clearLocalServices(ch, object : WifiP2pManager.ActionListener {
+            override fun onSuccess() {
+                manager.addLocalService(ch, info, object : WifiP2pManager.ActionListener {
+                    override fun onSuccess() {
+                        installServiceRequest(manager, ch)
+                    }
+                    override fun onFailure(reason: Int) {
+                        state("ERROR", "No se pudo publicar el servicio Argentas ($reason)")
+                    }
+                })
+            }
+            override fun onFailure(reason: Int) {
+                manager.addLocalService(ch, info, object : WifiP2pManager.ActionListener {
+                    override fun onSuccess() {
+                        installServiceRequest(manager, ch)
+                    }
+                    override fun onFailure(addReason: Int) {
+                        state("ERROR", "No se pudo publicar el servicio Argentas ($addReason)")
+                    }
+                })
+            }
+        })
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun installServiceRequest(
+        manager: WifiP2pManager,
+        ch: WifiP2pManager.Channel
+    ) {
+        serviceRequest?.let { old ->
+            try { manager.removeServiceRequest(ch, old, null) } catch (_: Exception) {}
+        }
+        val request = WifiP2pDnsSdServiceRequest.newInstance(
+            "_argentas._tcp"
+        )
+        serviceRequest = request
+        manager.addServiceRequest(ch, request, object : WifiP2pManager.ActionListener {
+            override fun onSuccess() {
+                discoverServices(manager, ch)
+            }
+            override fun onFailure(reason: Int) {
+                state("ERROR", "No se pudo preparar la búsqueda de Argentas ($reason)")
+            }
+        })
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun discoverServices(
+        manager: WifiP2pManager,
+        ch: WifiP2pManager.Channel
+    ) {
+        serviceAddresses.clear()
+        serviceDevices.clear()
+        devices.clear()
+        publishDevices()
+        state("BUSCANDO", "Buscando otros Argentas por Wi-Fi Direct…")
+        manager.discoverServices(ch, object : WifiP2pManager.ActionListener {
+            override fun onSuccess() {
+                state("BUSCANDO", "Buscando otros Argentas…")
+            }
+            override fun onFailure(reason: Int) {
+                state("ERROR", "No se pudo buscar Argentas por Wi-Fi Direct ($reason)")
+                scheduleReconnect(3000)
+            }
+        })
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun requestPeers() {
+        // Intencionalmente no mostramos requestPeers(): devuelve dispositivos Wi-Fi
+        // genéricos (TV, impresoras, etc.). La lista visible se alimenta exclusivamente
+        // del servicio DNS-SD _argentas._tcp.
+        publishDevices()
     }
 
     @SuppressLint("MissingPermission")

@@ -2,15 +2,23 @@
 <style>
 :root{--bg:#101010;--card:#1d1d1d;--line:#333;--gold:#e8b84a;--ok:#35c46a;--muted:#aaa;--red:#d95757}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#fff;font-family:Inter,system-ui,-apple-system,sans-serif}.wrap{max-width:760px;margin:auto;padding:14px}.top{display:flex;justify-content:space-between;align-items:center;gap:8px}.brand{font-size:24px;font-weight:900}.conn{font-size:12px;color:var(--muted)}.tabs{display:flex;gap:4px;overflow:auto;margin:14px 0;padding:6px;background:#151515;border:1px solid #292929;border-radius:14px}.tabs button{white-space:nowrap;background:transparent;color:#aaa;border:0;border-radius:10px;padding:10px 9px;font-weight:900;font-size:11px;letter-spacing:.03em}.tabs button.active{background:var(--gold);color:#111;box-shadow:0 5px 16px #e8b84a33}.panel{display:none}.panel.active{display:block}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.prod,.card,.order{background:var(--card);border:1px solid var(--line);border-radius:13px}.prod{padding:12px;text-align:left;color:#fff}.prod b{display:block}.prod span{display:block;color:var(--gold);margin-top:5px}.card,.order{padding:12px;margin:10px 0}.row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #2d2d2d}.row:last-child{border:0}.actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}button{border:0;border-radius:9px;padding:9px 11px;font-weight:700}button.primary{background:var(--gold);color:#111}button.ok{background:var(--ok);color:#07140b}button.dark{background:#303030;color:#fff}button.red{background:var(--red);color:#fff}.total{font-size:22px;font-weight:900;text-align:right;margin:12px 0}.empty{text-align:center;color:var(--muted);padding:25px}.small{font-size:12px;color:var(--muted)}.badge{font-size:11px;padding:4px 7px;border-radius:99px;background:#3b321b;color:#f2cf68}.badge.ok{background:#163a23;color:#7ce29a}.device{display:flex;gap:7px;margin-top:10px}.device select{flex:1;padding:10px;border-radius:9px;background:#111;color:#fff;border:1px solid #444}.edit{display:grid;grid-template-columns:1fr 110px auto;gap:6px;align-items:center}.edit input{width:100%;padding:8px;background:#111;color:#fff;border:1px solid #444;border-radius:7px}@media(min-width:600px){.grid{grid-template-columns:repeat(3,1fr)}}#toast{display:none;position:fixed;bottom:15px;left:12px;right:12px;padding:12px;background:#eee;color:#111;border-radius:10px;text-align:center;font-weight:700}
 .custom-modal{display:none;position:fixed;inset:0;background:#000b;z-index:100;align-items:center;justify-content:center;padding:18px}.custom-modal.show{display:flex}.custom-box{width:min(430px,100%);max-height:90vh;overflow:auto;background:var(--card);border:1px solid #444;border-radius:16px;padding:18px;box-shadow:0 15px 50px #000}.custom-box h3{margin:0 0 4px}.custom-section{margin-top:18px;border-top:1px solid #333;padding-top:12px}.custom-option{display:flex;align-items:center;gap:10px;padding:11px 4px;font-size:16px}.custom-option input{width:21px;height:21px;accent-color:var(--gold)}.custom-actions{display:flex;gap:8px;margin-top:18px}.custom-actions button{flex:1}</style></head><body><div class="wrap">
-<div class="top"><div class="brand">ARGENTAS</div><div id="conn" class="conn">Bluetooth: desconectado</div></div>
+<div class="top"><div class="brand">ARGENTAS</div><div id="conn" class="conn">Servidor: conectando…</div></div>
 <div class="tabs"><button class="active" data-tab="new">Nueva</button><button data-tab="orders">Comandas</button><button data-tab="sales">Ventas</button><button data-tab="products">Productos</button><button data-tab="bt">Bluetooth</button></div>
 <section id="new" class="panel active"><div class="card" style="background:#111;border-color:#242424"><div style="color:#E8B84A;font-weight:1000;letter-spacing:.08em;font-size:11px">CONTROL DE VENTAS Y COMANDAS</div><div class="small" style="margin-top:4px">Misma identidad Argentas · nueva función de comandas</div></div><div id="grid" class="grid"></div><div class="card"><div><b>Comanda <span id="num"></span></b><button class="dark" style="float:right" onclick="draft=[];renderDraft()">Vaciar</button></div><div id="draft" class="empty">Agregá productos</div><div id="draftTotal" class="total">$0</div><button class="primary" onclick="createOrder()">Crear comanda</button></div></section>
 <section id="orders" class="panel"><div id="ordersList"></div></section>
 <section id="sales" class="panel"><div id="salesBox"></div></section>
-<section id="products" class="panel"><div class="card"><b>Productos</b><p class="small">Los cambios se sincronizan por Bluetooth.</p><div id="editor"></div></div></section>
-<section id="bt" class="panel"><div class="card"><b>Bluetooth directo</b><p class="small">Sin Wi‑Fi, hotspot, internet ni servidor.</p><div class="actions"><button onclick="waitBT()">Esperar conexión</button><button onclick="refreshBT()">Actualizar</button></div><div class="device"><select id="devices"><option value="">Elegí teléfono emparejado</option></select><button onclick="connectBT()">Conectar</button></div><p id="btmsg" class="small">Emparejá ambos teléfonos desde Android.</p></div></section>
+<section id="products" class="panel"><div class="card"><b>Productos</b><p class="small">Los cambios se sincronizan por Supabase.</p><div id="editor"></div></div></section>
+<section id="bt" class="panel"><div class="card"><b>Conexión online</b><p class="small">Argentas usa Internet y Supabase para sincronizar los dos dispositivos.</p><div class="actions"><button onclick="supabaseReconnect()">Reconectar</button><button onclick="supabaseTest()">Probar conexión</button></div><p id="btmsg" class="small">Conectando con el servidor…</p></div></section>
 </div><div class="tabs" style="position:fixed;left:10px;right:10px;bottom:10px;z-index:20;margin:0;justify-content:space-around;box-shadow:0 8px 30px #000"><button data-tab="new">⌂ Inicio</button><button data-tab="new">🛒 Venta</button><button data-tab="products">▣ Productos</button><button data-tab="orders">🧾 Comandas</button><button data-tab="bt">⋯ Más</button></div><div id="customModal" class="custom-modal" onclick="if(event.target===this)closeCustom()"><div class="custom-box"><h3 id="customTitle">Personalizar</h3><div class="small">Elegí solamente lo que quieras modificar.</div><div class="custom-section"><b>Ingredientes</b><label class="custom-option"><input type="checkbox" id="noLettuce"> Sin lechuga</label><label class="custom-option"><input type="checkbox" id="noTomato"> Sin tomate</label></div><div id="cheeseSection" class="custom-section"><b>Queso — elegir uno</b><label class="custom-option"><input type="checkbox" name="cheese" value="provoleta" onchange="chooseCheese(this)"> Provoleta</label><label class="custom-option"><input type="checkbox" name="cheese" value="cheddar" onchange="chooseCheese(this)"> Cheddar</label><label class="custom-option"><input type="checkbox" name="cheese" value="none" onchange="chooseCheese(this)"> Sin queso</label></div><div class="custom-actions"><button class="dark" onclick="closeCustom()">Cancelar</button><button class="primary" onclick="confirmCustom()">Agregar</button></div></div></div><div id="toast"></div>
 <script>
+const SUPABASE_URL='https://blnoenkmshrybsqpsvtx.supabase.co';
+const SUPABASE_KEY='sb_publishable_OmZ_iwMzQNUDeyTJXOjBqw_au5UgLN8';
+const SUPABASE_TABLE='argentas_conexion';
+const DEVICE_ID_KEY='argentas_supabase_device_id';
+const DEVICE_ID=localStorage.getItem(DEVICE_ID_KEY)||('d_'+Date.now()+'_'+Math.random().toString(36).slice(2,10));
+localStorage.setItem(DEVICE_ID_KEY,DEVICE_ID);
+const DEVICE_ROLE=window.innerWidth>=600?'tablet':'celular';
+let realtime=null,realtimeReady=false,reconnectTimer=null,heartbeatTimer=null,supabaseSending=false;
 const KEY='argentas_comandas_v2';
 const defaults=[['p1','Superpancho común',3000],['p2','Superpancho alemán',4000],['p3','Hamburguesa simple',6000],['p4','Hamburguesa doble',8500],['p5','Combo Ganador simple',10000],['p6','Combo Ganador doble',12500],['p7','Milanesa',6500],['p8','Milanesa con queso',8500],['p9','Mila-Combo',10000],['p10','Mila-Combo con queso',12000],['p11','Salchi-Combo común',6500],['p12','Salchi-Combo Alemán',7500]].map(x=>({id:x[0],name:x[1],price:x[2],updatedAt:Date.now()}));
 let db=load(),draft=[],connected=false;
@@ -43,14 +51,95 @@ function renderEditor(){editor.innerHTML=db.products.map(x=>'<div class="row"><b
 function price(id){let x=p(id),v=Number(document.getElementById('v_'+id).value);if(!x||!isFinite(v)||v<0)return;x.price=v;x.updatedAt=Date.now();save();render();sync();toast('Precio actualizado')}
 function render(){renderProducts();renderDraft();renderOrders();renderSales();renderEditor()}
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));document.getElementById(b.dataset.tab).classList.add('active');render()});
-function waitBT(){if(window.ArgentasNativeBluetooth)ArgentasNativeBluetooth.startServer()}
-function refreshBT(){if(window.ArgentasNativeBluetooth)ArgentasNativeBluetooth.refresh()}
-function connectBT(){let v=devices.value;if(v&&window.ArgentasNativeBluetooth)ArgentasNativeBluetooth.connect(v)}
+function setSupabaseState(ok,msg){
+  connected=!!ok;
+  conn.textContent=(ok?'Servidor: conectado':'Servidor: '+(msg||'desconectado'));
+  btmsg.textContent=msg||'';
+}
+async function supabaseInsert(mensaje){
+  const res=await fetch(SUPABASE_URL+'/rest/v1/'+SUPABASE_TABLE,{
+    method:'POST',
+    headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
+    body:JSON.stringify({dispositivo:DEVICE_ROLE,mensaje})
+  });
+  if(!res.ok) throw new Error('HTTP '+res.status);
+}
+function handleSupabaseRecord(row){
+  if(!row||row.dispositivo===DEVICE_ROLE)return;
+  let m=null;try{m=JSON.parse(row.mensaje)}catch(e){}
+  if(m&&m.type==='state'&&m.db)merge(m.db);
+  if(m&&m.type==='test'){
+    btmsg.textContent='Recibido de '+row.dispositivo+': '+(m.message||'prueba OK');
+    toast('Servidor: llegó la prueba del otro Argentas');
+  }
+}
+function openRealtime(){
+  if(realtime){try{realtime.close()}catch(e){}realtime=null}
+  setSupabaseState(false,'Conectando con Supabase…');
+  const wsUrl=SUPABASE_URL.replace(/^https:/,'wss:')+'/realtime/v1/websocket?apikey='+encodeURIComponent(SUPABASE_KEY)+'&vsn=1.0.0';
+  try{realtime=new WebSocket(wsUrl)}catch(e){scheduleRealtimeReconnect();return}
+  realtime.onopen=function(){
+    const join={topic:'realtime:argentas-conexion',event:'phx_join',payload:{config:{postgres_changes:[{event:'INSERT',schema:'public',table:SUPABASE_TABLE}]},user_token:SUPABASE_KEY},ref:'1'};
+    realtime.send(JSON.stringify(join));
+  };
+  realtime.onmessage=function(ev){
+    try{
+      const m=JSON.parse(ev.data);
+      if(m.event==='phx_reply'&&m.payload&&m.payload.status==='ok'){
+        realtimeReady=true;setSupabaseState(true,'Conectado a Supabase · '+DEVICE_ROLE);startHeartbeat();sync();
+      } else if(m.event==='postgres_changes'&&m.payload&&m.payload.data){
+        handleSupabaseRecord(m.payload.data.record);
+      } else if(m.event==='system'&&m.payload&&m.payload.status==='ok'){
+        realtimeReady=true;setSupabaseState(true,'Conectado a Supabase · '+DEVICE_ROLE);startHeartbeat();sync();
+      }
+    }catch(e){}
+  };
+  realtime.onclose=function(){realtimeReady=false;stopHeartbeat();setSupabaseState(false,'Conexión perdida · reconectando…');scheduleRealtimeReconnect()};
+  realtime.onerror=function(){realtimeReady=false;setSupabaseState(false,'Error de conexión · reconectando…')};
+}
+function startHeartbeat(){
+  stopHeartbeat();
+  heartbeatTimer=setInterval(function(){
+    if(realtime&&realtime.readyState===WebSocket.OPEN){
+      realtime.send(JSON.stringify({topic:'phoenix',event:'heartbeat',payload:{},ref:String(Date.now())}));
+    }
+  },25000);
+}
+function stopHeartbeat(){if(heartbeatTimer){clearInterval(heartbeatTimer);heartbeatTimer=null}}
+function scheduleRealtimeReconnect(){
+  if(reconnectTimer)return;
+  reconnectTimer=setTimeout(function(){reconnectTimer=null;openRealtime()},3000);
+}
+function supabaseReconnect(){if(reconnectTimer){clearTimeout(reconnectTimer);reconnectTimer=null}openRealtime()}
+async function supabaseTest(){
+  try{
+    await supabaseInsert(JSON.stringify({type:'test',message:'Prueba Supabase desde '+DEVICE_ROLE,deviceId:DEVICE_ID,at:Date.now()}));
+    btmsg.textContent='Prueba enviada al servidor. Esperando al otro dispositivo…';
+    toast('Prueba enviada a Supabase');
+  }catch(e){setSupabaseState(false,'No se pudo escribir en Supabase: '+e.message)}
+}
 let syncing=false;
-function sync(){if(syncing)return;if(connected&&window.ArgentasNativeBluetooth)window.ArgentasNativeBluetooth.send(JSON.stringify({type:'state',db:db}))}
-function merge(remote){if(!remote)return;syncing=true;let om=new Map(db.orders.map(x=>[x.id,x]));(remote.orders||[]).forEach(x=>{let l=om.get(x.id);if(!l||Number(x.updatedAt)>Number(l.updatedAt))om.set(x.id,x)});db.orders=[...om.values()].sort((a,b)=>b.number-a.number);let pm=new Map(db.products.map(x=>[x.id,x]));(remote.products||[]).forEach(x=>{let l=pm.get(x.id);if(!l||Number(x.updatedAt)>Number(l.updatedAt))pm.set(x.id,x)});db.products=[...pm.values()];db.nextOrder=Math.max(db.nextOrder,remote.nextOrder||1,db.orders.reduce((m,o)=>Math.max(m,o.number+1),1));save();render();toast('Sincronizado');syncing=false}
-window.onBluetoothState=(s,m)=>{connected=s==='CONECTADO';conn.textContent='Bluetooth: '+s;btmsg.textContent=m||s;if(connected)sync()}
-window.onBluetoothMessage=raw=>{raw.trim().split('\n').filter(Boolean).forEach(line=>{try{let m=JSON.parse(line);if(m.type==='state'||m.type==='hello')merge(m.db)}catch(e){}})}
-window.addEventListener('argentas-bluetooth',e=>{if(e.detail.type!=='devices')return;devices.innerHTML='<option value="">Elegí teléfono</option>';e.detail.payload.devices.forEach(x=>{let o=document.createElement('option');o.value=x.address;o.textContent=x.name+' — '+x.address;devices.appendChild(o)})});
+async function sync(){
+  if(syncing||!realtimeReady||supabaseSending)return;
+  syncing=true;supabaseSending=true;
+  try{
+    await supabaseInsert(JSON.stringify({type:'state',db:db,deviceId:DEVICE_ID,at:Date.now()}));
+  }catch(e){
+    btmsg.textContent='No se pudo sincronizar: '+e.message;
+  }finally{supabaseSending=false;syncing=false}
+}
+function merge(remote){
+  if(!remote)return;
+  syncing=true;
+  let om=new Map(db.orders.map(x=>[x.id,x]));
+  (remote.orders||[]).forEach(x=>{let l=om.get(x.id);if(!l||Number(x.updatedAt)>Number(l.updatedAt))om.set(x.id,x)});
+  db.orders=[...om.values()].sort((a,b)=>b.number-a.number);
+  let pm=new Map(db.products.map(x=>[x.id,x]));
+  (remote.products||[]).forEach(x=>{let l=pm.get(x.id);if(!l||Number(x.updatedAt)>Number(l.updatedAt))pm.set(x.id,x)});
+  db.products=[...pm.values()];
+  db.nextOrder=Math.max(db.nextOrder,remote.nextOrder||1,db.orders.reduce((m,o)=>Math.max(m,o.number+1),1));
+  save();render();toast('Sincronizado por Supabase');syncing=false;
+}
 render();
+openRealtime();
 </script></body></html>

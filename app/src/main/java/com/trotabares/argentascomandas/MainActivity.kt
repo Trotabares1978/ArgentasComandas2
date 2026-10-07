@@ -130,7 +130,7 @@ class MainActivity : AppCompatActivity() {
         try {
             val launch = packageManager.getLaunchIntentForPackage("com.trotabares.argentaslink")
             if (launch != null) {
-                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                 startActivity(launch)
                 dispatchState("CONECTANDO", "Abriendo ArgentasLink…")
             } else {
@@ -142,8 +142,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun reconnectAndOpenArgentasLink() {
-        closeBridge()
-        dispatchState("CONECTANDO", "Abriendo ArgentasLink y conectando…")
+        // No cortar un puente sano para "actualizar": si ArgentasLink ya está
+        // abierto, simplemente lo traemos al frente. El conector único se
+        // encarga de mantener/recrear el puente si realmente se cayó.
+        dispatchState(
+            if (remoteLinkConnected) "CONECTADO" else "CONECTANDO",
+            if (remoteLinkConnected)
+                "ArgentasLink conectado con el otro equipo"
+            else
+                "Comprobando conexión con ArgentasLink…"
+        )
         openArgentasLink()
     }
 

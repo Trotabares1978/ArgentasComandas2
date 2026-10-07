@@ -26,16 +26,19 @@ jobs:
           java-version: "17"
 
       - name: Prepare Argentas
-        if: github.ref_name == 'main'
+        env:
+          ARGENTAS_TRANSPORT: ${{ github.ref_name == 'supabase-online' && 'supabase' || 'bluetooth' }}
         run: python3 scripts/prepare_argentas.py
 
-      - name: Verify Supabase online build
-        if: github.ref_name == 'supabase-online'
+      - name: Verify transport
         run: |
-          grep -q "Supabase" app/src/main/assets/index.html
-          ! grep -q "Probar Nearby" app/src/main/assets/index.html
-          ! grep -q "ArgentasNearbyManager" app/src/main/assets/index.html
-          echo "OK: build is using the Supabase online transport."
+          if [ "${GITHUB_REF_NAME}" = "supabase-online" ]; then
+            grep -q "blnoenkmshrybsqpsvtx.supabase.co" app/src/main/assets/index.html
+            grep -q "ARGENTAS_SUPABASE_TRANSPORT" app/src/main/assets/index.html
+            grep -q "ARGENTAS · COMANDAS" app/src/main/assets/index.html
+            ! grep -q "PROBAR NEARBY" app/src/main/assets/index.html
+            echo "OK: original Argentas UI + Supabase transport"
+          fi
 
       - name: Prepare icon
         run: |

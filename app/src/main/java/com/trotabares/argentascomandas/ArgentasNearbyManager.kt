@@ -23,6 +23,7 @@ import java.nio.charset.StandardCharsets
 class ArgentasNearbyManager(
     private val context: Context,
     private val deviceId: String,
+    private val localRole: String,
     private val onMessage: (String) -> Unit,
     private val onConnected: () -> Unit,
     private val onDisconnected: () -> Unit,
@@ -31,6 +32,8 @@ class ArgentasNearbyManager(
     companion object {
         private const val SERVICE_ID = "com.trotabares.argentascomandas.NEARBY"
         private const val PREFIX = "ARGENTAS:"
+        private const val ROLE_CAJA = "caja"
+        private const val ROLE_COCINA = "cocina"
     }
 
     private val client = Nearby.getConnectionsClient(context)
@@ -117,30 +120,36 @@ class ArgentasNearbyManager(
         }
     }
 
-    private fun remoteId(info: DiscoveredEndpointInfo): String {
+    private data class Remote(val role: String, val id: String)
+
+    private fun remote(info: DiscoveredEndpointInfo): Remote? {
         return try {
-            String(info.endpointInfo ?: ByteArray(0), StandardCharsets.UTF_8)
-                .removePrefix(PREFIX)
-                .trim()
+            val raw = String(info.endpointInfo ?: ByteArray(0), StandardCharsets.UTF_8)
+            if (!raw.startsWith(PREFIX)) return null
+            val parts = raw.removePrefix(PREFIX).split(":", limit = 2)
+            if (parts.size != 2) return null
+            Remote(parts[0].lowercase(), parts[1].trim())
         } catch (_: Exception) {
-            ""
+            null
         }
     }
 
     private val endpointDiscoveryCallback = object : EndpointDiscoveryCallback() {
         override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
-            val remoteId = remoteId(info)
-            if (remoteId.isBlank() || remoteId == deviceId) {
+            val remote = remote(info)
+            if (remote == null || remote.id.isBlank() || remote.id == deviceId) {
                 diagnostic("Nearby=ENDPOINT_IGNORADO")
                 return
             }
 
-            diagnostic("Nearby=ENCONTRADO; nombre=" + info.endpointName + "; id=" + remoteId)
+            diagnostic("Nearby=ENCONTRADO; nombre=" + info.endpointName + "; rol=" + remote.role + "; id=" + remote.id)
 
-            if (deviceId < remoteId && connectedEndpoint == null) {
-                diagnostic("Nearby=SOLICITANDO_CONEXION")
+            // En producción, Cocina inicia y Caja espera. Así evitamos que
+            // ambos equipos compitan por iniciar la misma conexión.
+            if (localRole == ROLE_COCINA && remote.role == ROLE_CAJA && connectedEndpoint == null) {
+                diagnostic("Nearby=CAJA_ENCONTRADA; SOLICITANDO_CONEXION")
                 client.requestConnection(
-                    (PREFIX + deviceId).toByteArray(StandardCharsets.UTF_8),
+                    (PREFIX + localRole + ":" + deviceId).toByteArray(StandardCharsets.UTF_8),
                     endpointId,
                     lifecycleCallback
                 ).addOnSuccessListener {

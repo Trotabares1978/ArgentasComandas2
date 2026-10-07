@@ -66,7 +66,7 @@
 </style>
 
 <script>(function(){'use strict';
-var KEY='argentas_comandas_v2',db=load(),draft=[],connected=false,syncing=false,pendingPaymentId=null,lastAction=null,cashPromptKey=null;
+var KEY='argentas_comandas_v2',db=load(),draft=[],connected=false,syncing=false,pendingPaymentId=null,lastAction=null,cashPromptKey=null;try{var _la=JSON.parse(localStorage.getItem('argentas_last_action')||'null');if(_la&&_la.type&&_la.id)lastAction=_la}catch(e){lastAction=null}
 var syncDiag={lastSend:0,lastReceive:0,lastAck:0,lastConnect:0,lastDisconnect:0,lastError:'',receivedStates:0,sentStates:0};
 function diagSave(){try{localStorage.setItem('argentas_sync_diag',JSON.stringify(syncDiag))}catch(e){}}
 function diagLoad(){try{var x=JSON.parse(localStorage.getItem('argentas_sync_diag')||'null');if(x&&typeof x==='object')Object.assign(syncDiag,x)}catch(e){}}
@@ -146,9 +146,10 @@ var defaults=[['p1','Superpancho común',3000],['p2','Superpancho alemán',4000]
 function load(){try{var d=JSON.parse(localStorage.getItem(KEY));if(d&&Array.isArray(d.products)&&Array.isArray(d.orders)){var migrated=!Number(d.stateVersion)||Number(d.stateVersion)<4;d.orders.forEach(function(o){if(o.status==='pendiente')o.status='recibido';if(!o.day){var dt=new Date(Number(o.createdAt)||Date.now());o.day=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0')}if(migrated&&o.status!=='entregada'&&o.status!=='cancelada'&&o.status!=='oculta')o.status='recibido'});d.stateVersion=4;return d}}catch(e){}return{products:defaults,orders:[],nextOrder:1,stateVersion:4,updatedAt:Date.now()}}
 function refreshOrdersFromStorage(){try{var raw=localStorage.getItem(KEY),stored=raw?JSON.parse(raw):null;if(!stored||!Array.isArray(stored.orders))return false;var local=db.orders||[],map=new Map();local.forEach(function(o){if(o&&o.id)map.set(o.id,o)});stored.orders.forEach(function(o){if(!o||!o.id)return;var cur=map.get(o.id);if(!cur||Number(o.updatedAt||o.createdAt||0)>=Number(cur.updatedAt||cur.createdAt||0))map.set(o.id,o)});var merged=Array.from(map.values()).sort(function(a,b){return Number(b.createdAt||0)-Number(a.createdAt||0)}),changed=JSON.stringify(merged)!==JSON.stringify(local);if(changed){db.orders=merged;db.nextOrder=Math.max(Number(db.nextOrder)||1,Number(stored.nextOrder)||1);renderOrders()}return changed}catch(e){return false}}
 function save(){db.updatedAt=Date.now();localStorage.setItem(KEY,JSON.stringify(db))}
-function rememberAction(a){a.at=Date.now();lastAction=a;renderUndo()}
+function rememberAction(a){a.at=Date.now();lastAction=a;try{localStorage.setItem('argentas_last_action',JSON.stringify(a))}catch(e){}renderUndo()}
 function renderUndo(){var b=document.getElementById('ac-undo');if(!b)return;b.disabled=!lastAction;b.style.opacity=lastAction?'1':'.45';b.textContent=lastAction?'↶ Deshacer: '+lastAction.label:'↶ Deshacer'}
 function undo(){
+  if(!lastAction){try{lastAction=JSON.parse(localStorage.getItem('argentas_last_action')||'null')}catch(e){lastAction=null}}
   if(!lastAction)return;
   var a=lastAction,o=db.orders.find(function(x){return x.id===a.id});
   if(a.type==='cancel'&&a.snapshot){
@@ -158,14 +159,14 @@ function undo(){
       restored.updatedAt=Date.now();
       db.orders[idx]=restored;
       save();importOrdersToCaja([restored]);
-      lastAction=null;renderAll();sync();
+      lastAction=null;try{localStorage.removeItem('argentas_last_action')}catch(e){}renderAll();renderUndo();sync();
     }
     return;
   }
   if(o&&Number(o.updatedAt||0)>Number(a.at||0)){lastAction=null;renderUndo();return}
-  if(a.type==='status'&&o){o.status=a.from;o.updatedAt=Date.now();save();importOrdersToCaja([o]);lastAction=null;renderAll();sync();return}
-  if(a.type==='create'&&o){o.status='oculta';o.updatedAt=Date.now();save();importOrdersToCaja([o]);lastAction=null;renderAll();sync();return}
-  if(a.type==='hide'&&o){o.status='entregada';o.updatedAt=Date.now();save();importOrdersToCaja([o]);lastAction=null;renderAll();sync()}
+  if(a.type==='status'&&o){o.status=a.from;o.updatedAt=Date.now();save();importOrdersToCaja([o]);lastAction=null;try{localStorage.removeItem('argentas_last_action')}catch(e){}renderAll();renderUndo();sync();return}
+  if(a.type==='create'&&o){o.status='oculta';o.updatedAt=Date.now();save();importOrdersToCaja([o]);lastAction=null;try{localStorage.removeItem('argentas_last_action')}catch(e){}renderAll();renderUndo();sync();return}
+  if(a.type==='hide'&&o){o.status='entregada';o.updatedAt=Date.now();save();importOrdersToCaja([o]);lastAction=null;try{localStorage.removeItem('argentas_last_action')}catch(e){}renderAll();renderUndo();sync()}
 }
 function p(id){return db.products.find(function(x){return x.id===id})}function money(n){return '$'+Number(n||0).toLocaleString('es-AR')}function sum(a){return a.reduce(function(s,x){return s+x.qty*x.price},0)}
 var PRODUCT_META_KEY='argentas_comandas_product_meta';
@@ -216,7 +217,7 @@ function mergeProductsIntoArgentas(remote){
     return changed;
   }catch(e){console.warn('No se pudieron devolver productos a Argentas',e);return false}
 }
-function renderNew(){document.getElementById('ac-num').textContent='#'+nextDailyNumber(todayKey());document.getElementById('ac-grid').innerHTML=db.products.filter(function(x){return x.active!==false}).map(function(x){return '<button class="ac-prod" data-p="'+x.id+'"><b>'+x.name+'</b><span>'+money(x.price)+'</span></button>'}).join('');document.querySelectorAll('#ac-grid [data-p]').forEach(function(b){b.onclick=function(){add(b.getAttribute('data-p'))}});renderDraft()}
+function renderNew(){document.getElementById('ac-num').textContent='#'+nextDailyNumber(todayKey());document.getElementById('ac-grid').innerHTML=db.products.filter(function(x){return x.active!==false}).map(function(x){var t=customizationType(x),custom=t?'<button type="button" class="ac-btn ac-primary ac-custom-product-btn" data-custom-product="'+x.id+'" style="display:block;width:100%;margin-top:8px;font-size:10px">⚙ PERSONALIZAR</button>':'';return '<div class="ac-prod" style="cursor:pointer" data-p="'+x.id+'"><b>'+x.name+'</b><span>'+money(x.price)+'</span>'+custom+'</div>'}).join('');document.querySelectorAll('#ac-grid [data-p]').forEach(function(b){b.onclick=function(e){if(e.target&&e.target.closest&&e.target.closest('[data-custom-product]'))return;add(b.getAttribute('data-p'))}});document.querySelectorAll('#ac-grid [data-custom-product]').forEach(function(b){b.onclick=function(e){e.preventDefault();e.stopPropagation();var x=p(b.getAttribute('data-custom-product')),t=customizationType(x);if(x&&t)openCustomization(x,t)}});renderDraft()}
 function normProductName(n){return String(n||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim()}
 function customizationType(x){
   var n=normProductName(x&&x.name);
@@ -224,12 +225,8 @@ function customizationType(x){
   if(/^p(3|4|5|6)$/.test(id))return 'hamburguesa';
   if(/^p(8|10)$/.test(id))return 'milanesa_con_queso';
   if(/^p(7|9)$/.test(id))return 'milanesa_sin_queso';
-  if(/pancho|panchos|hot ?dog/.test(n))return null;
-  if(/salchi|salchicha/.test(n))return null;
-  if(/milanesa|milacombo|mila\b/.test(n)){
-    if(/con queso|conqueso/.test(n))return 'milanesa_con_queso';
-    return 'milanesa_sin_queso';
-  }
+  if(/pancho|panchos|hot ?dog|salchi|salchicha/.test(n))return null;
+  if(/milanesa|milacombo|mila/.test(n))return /con ?queso/.test(n)?'milanesa_con_queso':'milanesa_sin_queso';
   if(/hamburguesa|burger|combo ganador|ganador|simple|doble|triple/.test(n))return 'hamburguesa';
   return null;
 }

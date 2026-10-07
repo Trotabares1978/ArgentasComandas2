@@ -196,7 +196,7 @@ function undo(){
     renderOrders();renderSales();renderUndo();renderBluetoothLed();sync();
     return;
   }
-  if(a.type!=='cancel'&&o&&Number(o.updatedAt||0)>Number(a.at||0)){lastAction=null;renderUndo();return}
+  if(a.type==='create'&&o&&Number(o.updatedAt||0)>Number(a.at||0)){lastAction=null;renderUndo();return}
   if((a.type==='status'||a.type==='hide')&&o){if(a.to&&o.status!==a.to){lastAction=null;try{localStorage.removeItem('argentas_last_action')}catch(e){}renderUndo();return}o.status=a.from;o.updatedAt=Date.now();save();importOrdersToCaja([o]);lastAction=null;try{localStorage.removeItem('argentas_last_action')}catch(e){}renderAll();renderUndo();sync();return}
   if(a.type==='create'&&o){o.status='oculta';o.updatedAt=Date.now();save();importOrdersToCaja([o]);lastAction=null;try{localStorage.removeItem('argentas_last_action')}catch(e){}renderAll();renderUndo();sync();return}
   if(a.type==='hide'&&o){o.status='entregada';o.updatedAt=Date.now();save();importOrdersToCaja([o]);lastAction=null;try{localStorage.removeItem('argentas_last_action')}catch(e){}renderAll();renderUndo();sync()}

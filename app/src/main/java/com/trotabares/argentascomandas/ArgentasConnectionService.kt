@@ -14,6 +14,7 @@ import android.content.pm.PackageManager
 import android.net.wifi.p2p.WifiP2pConfig
 import android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceInfo
 import android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceRequest
+import android.net.wifi.WifiManager
 import java.util.Locale
 import android.net.wifi.p2p.WifiP2pInfo
 import android.net.wifi.p2p.WifiP2pManager
@@ -28,8 +29,11 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.net.SocketTimeoutException
+import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import org.json.JSONArray
@@ -53,8 +57,13 @@ class ArgentasConnectionService : Service() {
         private const val CHANNEL_ID = "argentas_connection"
         private const val NOTIFICATION_ID = 8988
         private const val WIFI_PORT = 8988
+        private const val DISCOVERY_INTERVAL_MS = 5000L
+        private const val SERVICE_STALE_MS = 15000L
+        private const val HEARTBEAT_INTERVAL_MS = 3000L
+        private const val SOCKET_READ_TIMEOUT_MS = 10000
         private const val PREFS = "argentas_p2p"
         private const val LAST_PEER_KEY = "last_peer_address"
+        private const val DEVICE_ID_KEY = "device_id"
     }
 
     private val io = Executors.newCachedThreadPool()
@@ -63,6 +72,11 @@ class ArgentasConnectionService : Service() {
     private val epoch = AtomicLong(0L)
 
     private val prefs by lazy { getSharedPreferences(PREFS, Context.MODE_PRIVATE) }
+    private val deviceId: String by lazy {
+        prefs.getString(DEVICE_ID_KEY, null) ?: UUID.randomUUID().toString().also {
+            prefs.edit().putString(DEVICE_ID_KEY, it).apply()
+        }
+    }
 
     private var p2p: WifiP2pManager? = null
     private var channel: WifiP2pManager.Channel? = null
@@ -70,6 +84,8 @@ class ArgentasConnectionService : Service() {
     private val devices = linkedMapOf<String, String>()
     private val serviceDevices = linkedMapOf<String, String>()
     private val serviceAddresses = mutableSetOf<String>()
+    private val serviceDeviceIds = mutableMapOf<String, String>()
+    private val serviceSeenAt = mutableMapOf<String, Long>()
     private var localService: WifiP2pDnsSdServiceInfo? = null
     private var serviceRequest: WifiP2pDnsSdServiceRequest? = null
 
@@ -80,6 +96,9 @@ class ArgentasConnectionService : Service() {
     @Volatile private var groupFormed = false
     @Volatile private var stopping = false
     @Volatile private var reconnectScheduled = false
+    private var discoveryFuture: ScheduledFuture<*>? = null
+    private var heartbeatFuture: ScheduledFuture<*>? = null
+    @Volatile private var authorized = false
     @Volatile private var currentState = "DESCONECTADO"
     @Volatile private var currentText = "Conexión directa no iniciada"
 
@@ -165,6 +184,7 @@ class ArgentasConnectionService : Service() {
 
         state("LISTO", "Listo para conexión directa entre Argentas")
         setupServiceDiscovery()
+        startDiscoveryLoop()
         requestConnectionInfo()
     }
 
@@ -197,6 +217,18 @@ class ArgentasConnectionService : Service() {
         )
     }
 
+    private fun wifiEnabled(): Boolean {
+        val wm = getSystemService(Context.WIFI_SERVICE) as? WifiManager
+        return wm?.isWifiEnabled == true
+    }
+
+    private fun startDiscoveryLoop() {
+        discoveryFuture?.cancel(false)
+        discoveryFuture = reconnect.scheduleAtFixedRate({
+            if (!stopping && !connected && !groupFormed) discover()
+        }, 500, DISCOVERY_INTERVAL_MS, TimeUnit.MILLISECONDS)
+    }
+
     private fun locationModeEnabled(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return true
         val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
@@ -208,6 +240,10 @@ class ArgentasConnectionService : Service() {
         val manager = p2p ?: return
         val ch = channel ?: return
         if (!hasPermission()) return
+        if (!wifiEnabled()) {
+            state("ERROR", "Activá Wi-Fi para buscar el otro Argentas")
+            return
+        }
         if (!locationModeEnabled()) {
             state("ERROR", "Activá Ubicación para que Android permita el descubrimiento Wi-Fi Direct")
             return
@@ -218,6 +254,10 @@ class ArgentasConnectionService : Service() {
             if (app != "argentas") return@DnsSdTxtRecordListener
             val address = device.deviceAddress
             if (address.isNullOrBlank()) return@DnsSdTxtRecordListener
+            val remoteId = record["deviceId"]?.takeIf { it.isNotBlank() }
+            if (remoteId == deviceId) return@DnsSdTxtRecordListener
+            serviceDeviceIds[address] = remoteId ?: ""
+            serviceSeenAt[address] = System.currentTimeMillis()
             val name = record["name"]?.takeIf { it.isNotBlank() }
                 ?: device.deviceName.takeIf { it.isNotBlank() }
                 ?: "Argentas"
@@ -236,6 +276,8 @@ class ArgentasConnectionService : Service() {
             if (registrationType != "_argentas._tcp") return@DnsSdServiceResponseListener
             val address = device.deviceAddress
             if (address.isNullOrBlank()) return@DnsSdServiceResponseListener
+            if (address == "02:00:00:00:00:00") return@DnsSdServiceResponseListener
+            serviceSeenAt[address] = System.currentTimeMillis()
             val name = device.deviceName.takeIf { it.isNotBlank() } ?: "Argentas"
             serviceAddresses.add(address)
             serviceDevices[address] = name
@@ -252,10 +294,12 @@ class ArgentasConnectionService : Service() {
         val record = mapOf(
             "app" to "argentas",
             "name" to "Argentas",
-            "version" to "1"
+            "version" to "2",
+            "deviceId" to deviceId,
+            "port" to WIFI_PORT.toString()
         )
         val info = WifiP2pDnsSdServiceInfo.newInstance(
-            "Argentas",
+            "Argentas-$deviceId",
             "_argentas._tcp",
             record
         )
@@ -310,11 +354,32 @@ class ArgentasConnectionService : Service() {
     ) {
         manager.addServiceRequest(ch, request, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
+                startPeerDiscovery(manager, ch)
                 discoverServices(manager, ch)
             }
             override fun onFailure(reason: Int) {
-                state("ERROR", "No se pudo preparar la búsqueda de Argentas ($reason)")
-                scheduleReconnect(3000)
+                startPeerDiscovery(manager, ch)
+                state("ERROR", "No se pudo preparar la búsqueda de Argentas ($reason); reintentando…")
+                scheduleReconnect(1500)
+            }
+        })
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun startPeerDiscovery(
+        manager: WifiP2pManager,
+        ch: WifiP2pManager.Channel
+    ) {
+        if (!wifiEnabled() || !locationModeEnabled()) return
+        manager.discoverPeers(ch, object : WifiP2pManager.ActionListener {
+            override fun onSuccess() {
+                // Peer discovery is only a transport-level fallback/candidate scan.
+                // The UI still shows only DNS-SD Argentas services.
+            }
+            override fun onFailure(reason: Int) {
+                if (reason == WifiP2pManager.BUSY) {
+                    scheduleReconnect(1200)
+                }
             }
         })
     }
@@ -324,9 +389,15 @@ class ArgentasConnectionService : Service() {
         manager: WifiP2pManager,
         ch: WifiP2pManager.Channel
     ) {
-        serviceAddresses.clear()
-        serviceDevices.clear()
-        devices.clear()
+        val now = System.currentTimeMillis()
+        val stale = serviceSeenAt.filterValues { now - it > SERVICE_STALE_MS }.keys.toList()
+        stale.forEach {
+            serviceSeenAt.remove(it)
+            serviceAddresses.remove(it)
+            serviceDevices.remove(it)
+            serviceDeviceIds.remove(it)
+            devices.remove(it)
+        }
         publishDevices()
         state("BUSCANDO", "Buscando otros Argentas por Wi-Fi Direct…")
         manager.discoverServices(ch, object : WifiP2pManager.ActionListener {
@@ -381,7 +452,7 @@ class ArgentasConnectionService : Service() {
     private fun connectP2P(address: String, automatic: Boolean = false) {
         val manager = p2p ?: return
         val ch = channel ?: return
-        if (address.isBlank() || connected) return
+        if (address.isBlank() || connected || !serviceAddresses.contains(address)) return
         if (groupFormed) {
             requestConnectionInfo()
             return
@@ -397,9 +468,12 @@ class ArgentasConnectionService : Service() {
             "Conectando directamente con el dispositivo elegido…"
         })
 
+        val remoteId = serviceDeviceIds[address].orEmpty()
         val config = WifiP2pConfig().apply {
             deviceAddress = address
-            groupOwnerIntent = 7
+            // Deterministic GO preference prevents both phones from racing
+            // to become group owner when they reconnect at the same time.
+            groupOwnerIntent = if (remoteId.isNotBlank() && deviceId < remoteId) 15 else 0
         }
 
         manager.connect(ch, config, object : WifiP2pManager.ActionListener {
@@ -442,6 +516,12 @@ class ArgentasConnectionService : Service() {
 
         manager.requestConnectionInfo(ch) { info: WifiP2pInfo ->
             if (!info.groupFormed) {
+                // Some ROMs emit transient "not formed" callbacks while the
+                // existing TCP channel is still alive. Never tear down a live
+                // transport because of that transient P2P notification.
+                if (connected && socketIsAlive()) {
+                    return@requestConnectionInfo
+                }
                 val wasGroup = groupFormed
                 groupFormed = false
                 if (connected) {
@@ -552,21 +632,28 @@ class ArgentasConnectionService : Service() {
         try {
             s.tcpNoDelay = true
             s.keepAlive = true
+            s.soTimeout = SOCKET_READ_TIMEOUT_MS
         } catch (_: Exception) {}
         socket = s
         connected = true
+        authorized = false
         reconnectScheduled = false
-        state("CONECTADO", "Conectado directamente con otro Argentas")
-        event(EVENT_AUTHORIZED)
+        state("CONECTANDO", "Canal Wi-Fi Direct creado; verificando Argentas…")
+        sendTransportHello()
+        startHeartbeat()
 
         io.execute {
             try {
                 val reader = BufferedReader(
                     InputStreamReader(s.getInputStream(), Charsets.UTF_8)
                 )
-                while (!stopping) {
-                    val line = reader.readLine() ?: break
-                    if (line.isNotBlank()) event(EVENT_MESSAGE, message = line)
+                while (!stopping && socket === s) {
+                    try {
+                        val line = reader.readLine() ?: break
+                        if (line.isNotBlank()) handleIncomingLine(line)
+                    } catch (_: SocketTimeoutException) {
+                        if (socket !== s || stopping) break
+                    }
                 }
             } catch (_: Exception) {
             } finally {
@@ -583,16 +670,56 @@ class ArgentasConnectionService : Service() {
         }
     }
 
-    private fun sendMessage(message: String) {
-        val s = socket
-        if (!connected || s == null || s.isClosed) {
-            state("DESCONECTADO", "No hay conexión directa activa")
-            return
-        }
+    private fun startHeartbeat() {
+        heartbeatFuture?.cancel(false)
+        heartbeatFuture = reconnect.scheduleAtFixedRate({
+            if (!stopping && connected) sendTransportHello()
+        }, HEARTBEAT_INTERVAL_MS, HEARTBEAT_INTERVAL_MS, TimeUnit.MILLISECONDS)
+    }
 
+    private fun sendTransportHello() {
+        val payload = JSONObject()
+            .put("type", "hello")
+            .put("app", "ARGENTAS")
+            .put("protocol", 1)
+            .put("deviceId", deviceId)
+            .put("ts", System.currentTimeMillis())
+            .toString()
+        sendRaw(payload)
+    }
+
+    private fun handleIncomingLine(line: String) {
+        try {
+            val obj = JSONObject(line)
+            when (obj.optString("type")) {
+                "hello" -> {
+                    sendRaw(JSONObject().put("type", "hello-ack").put("ts", System.currentTimeMillis()).toString())
+                    if (!authorized) {
+                        authorized = true
+                        state("CONECTADO", "Conectado directamente con otro Argentas")
+                        event(EVENT_AUTHORIZED)
+                    }
+                }
+                "hello-ack" -> {
+                    if (!authorized) {
+                        authorized = true
+                        state("CONECTADO", "Conectado directamente con otro Argentas")
+                        event(EVENT_AUTHORIZED)
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            // Application payloads are forwarded unchanged below.
+        }
+        event(EVENT_MESSAGE, message = line)
+    }
+
+    private fun sendRaw(message: String) {
+        val s = socket ?: return
+        if (!connected || s.isClosed) return
         writer.execute {
             try {
-                val clean = message.replace("\r", "").replace("\n", "") + "\n"
+                val clean = message.replace("\\r", "").replace("\\n", "") + "\\n"
                 val out = s.getOutputStream()
                 synchronized(out) {
                     out.write(clean.toByteArray(Charsets.UTF_8))
@@ -608,10 +735,23 @@ class ArgentasConnectionService : Service() {
         }
     }
 
+    private fun sendMessage(message: String) {
+        val s = socket
+        if (!connected || !authorized || s == null || s.isClosed) {
+            state("DESCONECTADO", "No hay conexión directa activa")
+            return
+        }
+
+        sendRaw(message)
+    }
+
     private fun closeTransport() {
         epoch.incrementAndGet()
         connected = false
+        authorized = false
         tcpConnecting = false
+        heartbeatFuture?.cancel(false)
+        heartbeatFuture = null
         try { socket?.close() } catch (_: Exception) {}
         socket = null
         try { server?.close() } catch (_: Exception) {}
@@ -620,8 +760,6 @@ class ArgentasConnectionService : Service() {
 
     private fun scheduleReconnect(delayMs: Long = 1500) {
         if (stopping || reconnectScheduled || connected) return
-        if (prefs.getString(LAST_PEER_KEY, null).isNullOrBlank()) return
-
         reconnectScheduled = true
         reconnect.schedule({
             reconnectScheduled = false
@@ -705,6 +843,8 @@ class ArgentasConnectionService : Service() {
         stopping = true
         try { receiver?.let { unregisterReceiver(it) } } catch (_: Exception) {}
         closeTransport()
+        discoveryFuture?.cancel(true)
+        heartbeatFuture?.cancel(true)
         reconnect.shutdownNow()
         writer.shutdownNow()
         io.shutdownNow()

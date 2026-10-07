@@ -111,12 +111,14 @@ class ArgentasConnectionService : Service() {
     @Volatile private var reconnectAttempt = 0
     @Volatile private var currentState = "DESCONECTADO"
     @Volatile private var currentText = "Conexión directa no iniciada"
+    private var nearbyManager: ArgentasNearbyManager? = null
 
     override fun onCreate() {
         super.onCreate()
         createChannel()
         startForeground(NOTIFICATION_ID, notification())
         registerP2P()
+        nearbyManager = ArgentasNearbyManager(this, deviceId) { msg -> diagnostic(msg) }
     }
 
     private fun hasPermission(): Boolean {
@@ -941,6 +943,8 @@ class ArgentasConnectionService : Service() {
     }
 
     override fun onDestroy() {
+        nearbyManager?.stop()
+        nearbyManager = null
         stopping = true
         try { receiver?.let { unregisterReceiver(it) } } catch (_: Exception) {}
         closeTransport()

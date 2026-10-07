@@ -55,6 +55,7 @@ class MainActivity : AppCompatActivity() {
             while (running) {
                 try {
                     if (bridgeSocket?.isConnected == true && bridgeSocket?.isClosed == false) {
+                        dispatchState("CONECTADO", "ArgentasLink disponible")
                         Thread.sleep(1500)
                         continue
                     }

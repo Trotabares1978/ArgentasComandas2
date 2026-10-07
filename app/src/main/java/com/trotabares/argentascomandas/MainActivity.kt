@@ -64,6 +64,8 @@ class MainActivity : AppCompatActivity() {
         )
         if (Build.VERSION.SDK_INT >= 33) {
             list += Manifest.permission.NEARBY_WIFI_DEVICES
+            list += Manifest.permission.ACCESS_FINE_LOCATION
+            list += Manifest.permission.POST_NOTIFICATIONS
         } else {
             list += Manifest.permission.ACCESS_COARSE_LOCATION
             list += Manifest.permission.ACCESS_FINE_LOCATION
@@ -76,6 +78,10 @@ class MainActivity : AppCompatActivity() {
             ActivityCompat.checkSelfPermission(
                 this,
                 Manifest.permission.NEARBY_WIFI_DEVICES
+            ) == PackageManager.PERMISSION_GRANTED ||
+            ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
             ) == PackageManager.PERMISSION_GRANTED
     }
 

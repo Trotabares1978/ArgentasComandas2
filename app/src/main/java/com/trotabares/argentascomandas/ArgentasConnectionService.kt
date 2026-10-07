@@ -727,7 +727,17 @@ class ArgentasConnectionService : Service() {
     private fun startHeartbeat() {
         heartbeatFuture?.cancel(false)
         heartbeatFuture = reconnect.scheduleAtFixedRate({
-            if (!stopping && connected) sendTransportHello()
+            if (!stopping && connected) {
+                val now = System.currentTimeMillis()
+                if (now - lastHeartbeatAckAt > HEARTBEAT_TIMEOUT_MS) {
+                    diagnostic("heartbeat=TIMEOUT; sin ACK por " + (now - lastHeartbeatAckAt) + " ms")
+                    closeTransport()
+                    state("DESCONECTADO", "El enlace dejó de responder; intentando reconectar…")
+                    scheduleReconnect(500)
+                } else {
+                    sendTransportHello()
+                }
+            }
         }, HEARTBEAT_INTERVAL_MS, HEARTBEAT_INTERVAL_MS, TimeUnit.MILLISECONDS)
     }
 
@@ -755,6 +765,7 @@ class ArgentasConnectionService : Service() {
                     }
                 }
                 "hello-ack" -> {
+                    lastHeartbeatAckAt = System.currentTimeMillis()
                     if (!authorized) {
                         authorized = true
                         state("CONECTADO", "Conectado directamente con otro Argentas")

@@ -141,6 +141,7 @@ class ArgentasConnectionService : Service() {
         nearbyManager = ArgentasNearbyManager(
             this,
             deviceId,
+            deviceRole(),
             onMessage = { msg -> handleIncomingLine(msg) },
             onConnected = {
                 if (connected) {

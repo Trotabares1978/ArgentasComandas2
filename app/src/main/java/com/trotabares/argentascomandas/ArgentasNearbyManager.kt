@@ -23,6 +23,9 @@ import java.nio.charset.StandardCharsets
 class ArgentasNearbyManager(
     private val context: Context,
     private val deviceId: String,
+    private val onMessage: (String) -> Unit,
+    private val onConnected: () -> Unit,
+    private val onDisconnected: () -> Unit,
     private val diagnostic: (String) -> Unit
 ) {
     companion object {
@@ -31,8 +34,8 @@ class ArgentasNearbyManager(
     }
 
     private val client = Nearby.getConnectionsClient(context)
-    private var running = false
-    private var connectedEndpoint: String? = null
+    @Volatile private var running = false
+    @Volatile private var connectedEndpoint: String? = null
 
     private fun hasPermissions(): Boolean {
         if (Build.VERSION.SDK_INT >= 31) {
@@ -43,6 +46,9 @@ class ArgentasNearbyManager(
         return true
     }
 
+    fun isConnected(): Boolean = connectedEndpoint != null
+
+    @Synchronized
     fun start() {
         if (running) {
             diagnostic("Nearby=YA_ACTIVO")
@@ -94,6 +100,21 @@ class ArgentasNearbyManager(
         client.stopDiscovery()
         client.stopAllEndpoints()
         diagnostic("Nearby=DETENIDO")
+    }
+
+    fun send(message: String): Boolean {
+        val endpoint = connectedEndpoint ?: return false
+        return try {
+            client.sendPayload(
+                endpoint,
+                Payload.fromBytes(message.toByteArray(StandardCharsets.UTF_8))
+            )
+            diagnostic("Nearby=ENVIO_OK; bytes=" + message.toByteArray(StandardCharsets.UTF_8).size)
+            true
+        } catch (e: Exception) {
+            diagnostic("Nearby=ENVIO_EXCEPCION; " + (e.message ?: e.javaClass.simpleName))
+            false
+        }
     }
 
     private fun remoteId(info: DiscoveredEndpointInfo): String {
@@ -152,20 +173,34 @@ class ArgentasNearbyManager(
                 client.stopDiscovery()
                 client.stopAdvertising()
                 diagnostic("Nearby=CONECTADO")
+                onConnected()
+            } else {
+                diagnostic("Nearby=CONEXION_NO_ESTABLECIDA; codigo=" + code)
             }
         }
 
         override fun onDisconnected(endpointId: String) {
-            if (connectedEndpoint == endpointId) connectedEndpoint = null
-            diagnostic("Nearby=DESCONECTADO")
+            if (connectedEndpoint == endpointId) {
+                connectedEndpoint = null
+                diagnostic("Nearby=DESCONECTADO")
+                onDisconnected()
+                if (running) {
+                    client.stopAllEndpoints()
+                    android.os.Handler(context.mainLooper).postDelayed({
+                        if (running && connectedEndpoint == null) start()
+                    }, 1200)
+                }
+            }
         }
     }
 
     private val payloadCallback = object : PayloadCallback() {
         override fun onPayloadReceived(endpointId: String, payload: Payload) {
             if (payload.type == Payload.Type.BYTES) {
-                val bytes = payload.asBytes()
-                diagnostic("Nearby=DATOS_RECIBIDOS; bytes=" + (bytes?.size ?: 0))
+                val bytes = payload.asBytes() ?: return
+                val message = String(bytes, StandardCharsets.UTF_8)
+                diagnostic("Nearby=DATOS_RECIBIDOS; bytes=" + bytes.size)
+                onMessage(message)
             }
         }
 

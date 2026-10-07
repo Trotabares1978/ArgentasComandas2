@@ -193,13 +193,13 @@ function undo(){
     if(idx>=0)db.orders[idx]=restored;else db.orders.unshift(restored);
     save();importOrdersToCaja([restored]);
     lastAction=null;try{localStorage.removeItem('argentas_last_action');localStorage.removeItem('argentas_last_cancel_snapshot');localStorage.removeItem('argentas_undo_ready')}catch(e){}
-    renderOrders();renderSales();renderUndo();renderBluetoothLed();sync();
+    sendComandaStatus(restored);renderOrders();renderSales();renderUndo();renderBluetoothLed();sync();
     return;
   }
   if(a.type==='create'&&o&&Number(o.updatedAt||0)>Number(a.at||0)){lastAction=null;renderUndo();return}
-  if((a.type==='status'||a.type==='hide')&&a.snapshot){var restoredStatus=JSON.parse(JSON.stringify(a.snapshot)),idxStatus=db.orders.findIndex(function(x){return x&&x.id===a.id});restoredStatus.updatedAt=Date.now();if(idxStatus>=0)db.orders[idxStatus]=restoredStatus;else db.orders.unshift(restoredStatus);save();importOrdersToCaja([restoredStatus]);lastAction=null;try{localStorage.removeItem('argentas_last_action')}catch(e){}renderAfterUndo();renderUndo();sync();return}
-  if(a.type==='create'&&o){o.status='oculta';o.updatedAt=Date.now();save();importOrdersToCaja([o]);lastAction=null;try{localStorage.removeItem('argentas_last_action')}catch(e){}renderAll();renderUndo();sync();return}
-  if(a.type==='hide'&&o){o.status='entregada';o.updatedAt=Date.now();save();importOrdersToCaja([o]);lastAction=null;try{localStorage.removeItem('argentas_last_action')}catch(e){}renderAfterUndo();renderUndo();sync()}
+  if((a.type==='status'||a.type==='hide')&&a.snapshot){var restoredStatus=JSON.parse(JSON.stringify(a.snapshot)),idxStatus=db.orders.findIndex(function(x){return x&&x.id===a.id});restoredStatus.updatedAt=Date.now();if(idxStatus>=0)db.orders[idxStatus]=restoredStatus;else db.orders.unshift(restoredStatus);save();importOrdersToCaja([restoredStatus]);lastAction=null;try{localStorage.removeItem('argentas_last_action')}catch(e){}sendComandaStatus(restoredStatus);renderAfterUndo();renderUndo();sync();return}
+  if(a.type==='create'&&o){o.status='oculta';o.updatedAt=Date.now();save();importOrdersToCaja([o]);lastAction=null;try{localStorage.removeItem('argentas_last_action')}catch(e){}sendComandaStatus(o);renderAll();renderUndo();sync();return}
+  if(a.type==='hide'&&o){o.status='entregada';o.updatedAt=Date.now();save();importOrdersToCaja([o]);lastAction=null;try{localStorage.removeItem('argentas_last_action')}catch(e){}sendComandaStatus(o);renderAfterUndo();renderUndo();sync()}
 }
 function renderAfterUndo(){
   try{renderAll()}catch(e){try{renderOrders()}catch(_){}}
@@ -338,7 +338,7 @@ function add(id){
   openCustomization(x,type);
 }
 function editDraftCustomization(i){var line=draft[i],x=line&&(p(line.productId)||line),type=line&&customizationType(x);if(!line||!type)return;openCustomization(x,type,line,{kind:'draft',index:i,line:line})}
-function saveEditedOrderLine(ctx){var o=db.orders.find(function(x){return x&&x.id===ctx.orderId});if(!o)return;o.updatedAt=Date.now();save();importOrdersToCaja([o]);sendComandaStatus(o);renderOrders();renderAll();sync()}
+function saveEditedOrderLine(ctx){var o=db.orders.find(function(x){return x&&x.id===ctx.orderId});if(!o)return;o.updatedAt=Date.now();save();importOrdersToCaja([o]);renderOrders();renderAll();sync()}
 function editOrderCustomization(orderId,lineIndex){var o=db.orders.find(function(x){return x&&x.id===orderId}),line=o&&Array.isArray(o.lines)?o.lines[lineIndex]:null,x=line&&(p(line.productId)||line),type=line&&customizationType(x);if(!o||!line||!type)return;openCustomization(x,type,line,{kind:'order',orderId:orderId,index:lineIndex,line:line})}
 function renderDraft(){
   var e=document.getElementById('ac-draft');
@@ -463,7 +463,7 @@ function buildStateMessage(){return{type:'state',msgId:'s'+Date.now()+'-'+(++rel
 function flushReliableState(){if(!connected||!window.ArgentasNativeBluetooth||!reliablePending)return;try{var q=syncQueue.find(function(x){return x.msgId===reliablePending.msgId});if(q){q.attempts++;q.lastSentAt=Date.now();saveSyncQueue()}window.ArgentasNativeBluetooth.send(JSON.stringify(reliablePending));syncDiag.lastSend=Date.now();syncDiag.sentStates++;diagSave();updateDiagnostics()}catch(e){syncDiag.lastError='No se pudo enviar el estado';diagSave();updateDiagnostics()}}
 var reliableRetryTimer=setInterval(function(){if(connected&&reliablePending)flushReliableState();if(connected&&comandaStatusQueue.length)flushComandaStatus()},2000);
 function sync(){if(syncing)return;reliablePending=buildStateMessage();persistReliablePending();queueSnapshot(reliablePending);flushReliableState();flushComandaStatus()}
-function sendHello(){if(!connected||!window.ArgentasNativeBluetooth)return;window.ArgentasNativeBluetooth.send(JSON.stringify({type:'hello',app:'Argentas-Comandas',ts:Date.now()}));flushReliableState()}
+function sendHello(){if(!connected||!window.ArgentasNativeBluetooth)return;window.ArgentasNativeBluetooth.send(JSON.stringify({type:'hello',app:'Argentas-Comandas',ts:Date.now()}));flushReliableState();flushComandaStatus()}
 loadReliableState();
 function orderStatusRank(s){return s==='recibido'?0:s==='preparando'?1:s==='entregada'?2:s==='cancelada'?3:s==='oculta'?4:s==='lista'?2:-1}
 function merge(remote,sales){if(!remote)return;syncing=true;var changed=false;try{if(mergeSales(sales||[]))changed=true;if(mergeCajaSnapshot(remote.caja||{}))changed=true;var om=new Map(db.orders.map(function(x){return[x.id,x]}));(remote.orders||[]).forEach(function(x){var l=om.get(x.id);if(!l){om.set(x.id,x);changed=true;return}var lr=orderStatusRank(l.status),rr=orderStatusRank(x.status),winner=Number(x.updatedAt||x.createdAt||0)>Number(l.updatedAt||l.createdAt||0)?x:l;if(rr>lr){var merged=Object.assign({},winner,x,{status:x.status});om.set(x.id,merged);changed=true}else if(rr===lr&&winner!==l){om.set(x.id,Object.assign({},l,x));changed=true}else if(rr<lr){var mergedBack=Object.assign({},x,l,{status:l.status});if(JSON.stringify(mergedBack)!==JSON.stringify(l)){om.set(x.id,mergedBack);changed=true}}});

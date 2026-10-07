@@ -194,7 +194,7 @@ class MainActivity : AppCompatActivity() {
         fun refresh() = sendCommand("refresh")
 
         @JavascriptInterface
-        fun startNearby() = sendCommand("nearby_start")
+        fun startNearby() = sendCommand("test_nearby")
 
         @JavascriptInterface
         fun stopNearby() = sendCommand("nearby_stop")

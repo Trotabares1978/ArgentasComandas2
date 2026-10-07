@@ -505,7 +505,12 @@ window.onBluetoothMessage=function(raw){raw.trim().split('\n').filter(Boolean).f
       reliablePending=null;persistReliablePending();ackQueue(m.msgId);syncDiag.lastAck=Date.now();diagSave();updateDiagnostics()
     }
   }else if(m.type==='hello'){
-    if(connected)setTimeout(function(){sendHello()},150)
+    if(connected){
+      try{window.ArgentasNativeBluetooth.send(JSON.stringify({type:'hello-ack',ts:Date.now()}))}catch(e){}
+      flushReliableState();
+    }
+  }else if(m.type==='hello-ack'){
+    if(connected)flushReliableState()
   }
 }catch(e){console.warn('Mensaje de sincronización inválido',e)}})}
 document.addEventListener('click',function(e){if(e.target&&e.target.id==='ac-diagnostics')toggleDiagnostics()});

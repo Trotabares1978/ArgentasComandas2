@@ -9,6 +9,7 @@ on:
     branches: [lan-final]
   workflow_dispatch:
 
+# Build automático de la versión LAN final.
 permissions:
   contents: read
 

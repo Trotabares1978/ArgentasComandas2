@@ -1231,12 +1231,12 @@ class ArgentasConnectionService : Service() {
     }
 
     private fun sendMessage(message: String) {
-        if (!connected || !authorized) {
+        val s = socket
+        if (!connected || !authorized || s == null || s.isClosed) {
             state("DESCONECTADO", "No hay conexión directa activa")
             return
         }
 
-        // El canal puede ser Wi-Fi Direct o Nearby. sendRaw() elige el transporte activo.
         sendRaw(message)
     }
 

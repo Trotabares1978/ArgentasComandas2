@@ -644,13 +644,16 @@ class ArgentasConnectionService : Service() {
 
         io.execute {
             var established = false
+            var attempt = 0
             try {
                 while (
                     !connected &&
                     groupFormed &&
                     epoch.get() == myEpoch &&
-                    !stopping
+                    !stopping &&
+                    attempt < 5
                 ) {
+                    attempt++
                     try {
                         val s = Socket()
                         s.tcpNoDelay = true
@@ -659,10 +662,13 @@ class ArgentasConnectionService : Service() {
                         attachSocket(s)
                         established = true
                     } catch (_: Exception) {
-                        try { TimeUnit.MILLISECONDS.sleep(1000) }
-                        catch (_: InterruptedException) {
-                            Thread.currentThread().interrupt()
-                            break
+                        if (attempt < 5) {
+                            val delay = minOf(1000L shl (attempt - 1), 8000L)
+                            try { TimeUnit.MILLISECONDS.sleep(delay) }
+                            catch (_: InterruptedException) {
+                                Thread.currentThread().interrupt()
+                                break
+                            }
                         }
                     }
                 }

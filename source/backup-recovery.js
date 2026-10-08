@@ -211,31 +211,6 @@
     reader.readAsText(file);
   }
 
-  function wrapTransport(){
-    if(window.__argentasTombstoneTransport)return;
-    var api=window.ArgentasNativeBluetooth;
-    if(!api||typeof api.send!=='function')return;
-    window.__argentasTombstoneTransport=true;
-    var originalSend=api.send.bind(api);
-    api.send=function(raw){
-      try{
-        var m=JSON.parse(raw);
-        if(m&&m.type==='state')m.tombstones=tombstones();
-        return originalSend(JSON.stringify(m));
-      }catch(e){return originalSend(raw)}
-    };
-    var originalReceive=window.onBluetoothMessage;
-    window.onBluetoothMessage=function(raw){
-      if(typeof originalReceive==='function')originalReceive(raw);
-      String(raw||'').trim().split('\n').filter(Boolean).forEach(function(line){
-        try{
-          var m=JSON.parse(line);
-          if(m&&m.type==='state'&&m.tombstones)applyTombstones(m.tombstones);
-        }catch(e){}
-      });
-    };
-  }
-
   function addUi(){
     var section=document.getElementById('ac-bt');
     if(!section||document.getElementById('ac-backup-card'))return;
@@ -250,7 +225,6 @@
 
   installStorageWatch();
   compactTombstones();
-  wrapTransport();
   automaticBackup();
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',addUi,{once:true});else addUi();
   window.argentasBackup=collect;

@@ -1008,7 +1008,7 @@ function merge(remote,sales,authoritativeOrders){
     var mergedProducts=Array.from(pm.values());if(JSON.stringify(mergedProducts)!==JSON.stringify(db.products))changed=true;db.products=mergedProducts;
     if(mergeProductsIntoArgentas(mergedProducts))changed=true;
     importOrdersToCaja(db.orders);
-    db.nextOrder=Math.max(db.nextOrder,remote.nextOrder||1,db.orders.reduce(function(m,o){return Math.max(m,Number(o.number)||0+1)},1));
+    db.nextOrder=Math.max(db.nextOrder,remote.nextOrder||1,db.orders.reduce(function(m,o){return Math.max(m,(Number(o.number)||0)+1)},1));
     if(changed){save();refreshComandasUI();}
   }finally{
     syncing=false;

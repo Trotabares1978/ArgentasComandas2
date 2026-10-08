@@ -7,7 +7,62 @@ var SUPABASE_URL='https://blnoenkmshrybsqpsvtx.supabase.co',TABLE='argentas_cone
 var login=document.getElementById('login'),app=document.getElementById('app'),oe=document.getElementById('orders'),se=document.getElementById('status'),ie=document.getElementById('info'),orders={},SUPABASE_KEY='sb_publishable_OmZ_iwMzQNUDeyTJXOjBqw_au5UgLN8';
 function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]})}function money(n){return '$'+(Number(n)||0).toLocaleString('es-AR')}function age(ms){var m=Math.max(0,Math.floor(ms/60000));return m<60?m+' min':Math.floor(m/60)+' h '+m%60+' min'}
 function merge(o){if(!o||!o.id||o.status==='oculta')return;var id=String(o.id),c=orders[id];if(!c){orders[id]=JSON.parse(JSON.stringify(o));return}var lu=Number(c.updatedAt||c.createdAt||0),ru=Number(o.updatedAt||o.createdAt||0);if(ru>=lu)Object.keys(o).forEach(function(k){c[k]=o[k]});var ls=Number(c.statusUpdatedAt||c.updatedAt||c.createdAt||0),rs=Number(o.statusUpdatedAt||o.updatedAt||o.createdAt||0);if(rs>ls||(rs===ls&&String(o.statusDeviceId||'')>String(c.statusDeviceId||''))){c.status=o.status;c.statusUpdatedAt=o.statusUpdatedAt;c.statusDeviceId=o.statusDeviceId||''}}
-function apply(raw){try{var m=JSON.parse(raw);if(m.type==='state'&&m.db&&Array.isArray(m.db.orders)){m.db.orders.forEach(merge)}else if(m.type==='vender-sale'&&m.sale){var s=m.sale,id='v'+String(s.comandaId||s.id),o=orders[id];if(!o){var lines=(s.items||[]).map(function(x){return{productId:String(x.productId||x.id||''),name:String(x.name||''),price:Number(x.price)||0,qty:Number(x.qty)||0,note:String(x.note||''),noLechuga:!!x.noLechuga,noTomate:!!x.noTomate,cheese:String(x.cheese||'')}}).filter(function(x){return x.qty>0});if(lines.length){var max=Object.keys(orders).reduce(function(n,k){return Math.max(n,Number(orders[k].number)||0)},0);orders[id]={id:id,number:max+1,day:new Date().toISOString().slice(0,10),lines:lines,total:Number(s.total)||0,status:'recibido',createdAt:s.timestamp?new Date(s.timestamp).getTime():Date.now(),updatedAt:s.timestamp?new Date(s.timestamp).getTime():Date.now(),source:'vender',venderSaleId:String(s.id)}}}else if(m.type==='comanda-status'&&m.id&&m.status){var c=orders[String(m.id)];if(c){var rs=Number(m.statusUpdatedAt||0),ls=Number(c.statusUpdatedAt||c.updatedAt||c.createdAt||0);if(rs>ls||(rs===ls&&String(m.statusDeviceId||'')>String(c.statusDeviceId||''))){c.status=m.status;c.statusUpdatedAt=rs;c.statusDeviceId=m.statusDeviceId||'';c.updatedAt=Math.max(Number(c.updatedAt||0),Number(m.updatedAt||0),rs)}}}}catch(e){}}
+function apply(raw){
+  try{
+    var m=JSON.parse(raw);
+    if(m.type==='state'&&m.db&&Array.isArray(m.db.orders)){
+      m.db.orders.forEach(merge);
+    }else if(m.type==='vender-sale'&&m.sale){
+      var s=m.sale,
+          id='v'+String(s.comandaId||s.id),
+          o=orders[id];
+      if(!o){
+        var lines=(s.items||[]).map(function(x){
+          return{
+            productId:String(x.productId||x.id||''),
+            name:String(x.name||''),
+            price:Number(x.price)||0,
+            qty:Number(x.qty)||0,
+            note:String(x.note||''),
+            noLechuga:!!x.noLechuga,
+            noTomate:!!x.noTomate,
+            cheese:String(x.cheese||'')
+          };
+        }).filter(function(x){return x.qty>0});
+        if(lines.length){
+          var max=Object.keys(orders).reduce(function(n,k){
+            return Math.max(n,Number(orders[k].number)||0);
+          },0);
+          var stamp=s.timestamp?new Date(s.timestamp).getTime():Date.now();
+          orders[id]={
+            id:id,
+            number:max+1,
+            day:new Date(stamp).toISOString().slice(0,10),
+            lines:lines,
+            total:Number(s.total)||0,
+            status:'recibido',
+            createdAt:stamp,
+            updatedAt:stamp,
+            source:'vender',
+            venderSaleId:String(s.id||'')
+          };
+        }
+      }
+    }else if(m.type==='comanda-status'&&m.id&&m.status){
+      var c=orders[String(m.id)];
+      if(c){
+        var rs=Number(m.statusUpdatedAt||0),
+            ls=Number(c.statusUpdatedAt||c.updatedAt||c.createdAt||0);
+        if(rs>ls||(rs===ls&&String(m.statusDeviceId||'')>String(c.statusDeviceId||''))){
+          c.status=m.status;
+          c.statusUpdatedAt=rs;
+          c.statusDeviceId=m.statusDeviceId||'';
+          c.updatedAt=Math.max(Number(c.updatedAt||0),Number(m.updatedAt||0),rs);
+        }
+      }
+    }
+  }catch(e){}
+}
 async function loadKey(){return SUPABASE_KEY}
 async function refresh(){try{se.textContent='CONECTANDO…';var key=await loadKey(),q=SUPABASE_URL+'/rest/v1/'+TABLE+'?select=mensaje,created_at&order=created_at.asc&limit=500',r=await fetch(q,{headers:{apikey:key}});if(!r.ok)throw Error('HTTP '+r.status);var rows=await r.json();orders={};rows.forEach(function(x){if(x&&x.mensaje)apply(x.mensaje)});render();se.textContent='● CONECTADO · '+new Date().toLocaleTimeString('es-AR')}catch(e){se.textContent='● ERROR DE CONEXIÓN';ie.textContent='No se pudo actualizar la pizarra. Se reintentará automáticamente.'}}
 function render(){var list=Object.keys(orders).map(function(k){return orders[k]}).filter(function(o){return o.status!=='oculta'&&o.status!=='entregada'&&o.status!=='cancelada'}).sort(function(a,b){return Number(a.createdAt||0)-Number(b.createdAt||0)});if(!list.length){oe.innerHTML='<div class="empty">No hay comandas pendientes.</div>';ie.textContent='Sin comandas pendientes';return}var now=Date.now();oe.innerHTML=list.map(function(o){var am=Math.max(0,now-Number(o.createdAt||now)),mins=Math.floor(am/60000),a20=mins>=20,a30=mins>=30,s=o.status||'recibido',cl=s==='preparando'?'prep':'received';if(a20)cl+=' alert20';if(a30)cl+=' alert30';var bd=a30?'🚨 +30 MIN · DEMORADA':a20?'⚠️ +20 MIN':(s==='preparando'?'EN PREPARACIÓN':'RECIBIDO'),bc=a30?'urgent':(a20?'alert':(s==='preparando'?'prep':'')),ls=Array.isArray(o.lines)?o.lines:Array.isArray(o.items)?o.items:[],lh=ls.map(function(l){var n=l.note||l.observacion||l.obs||'';return '<div class="line"><span class="qty">'+esc(l.qty||l.quantity||1)+'×</span> <span class="name">'+esc(l.name||l.productName||'Producto')+'</span>'+(n?'<div class="note">'+esc(n)+'</div>':'')+'</div>'}).join('');var next=s==='recibido'?'preparando':(s==='preparando'?'entregada':'oculta'),nextLabel=next==='preparando'?'EN PREPARACIÓN':(next==='entregada'?'ENTREGAR':'OCULTAR');return '<article class="card '+cl+'"><div class="top"><div><div class="num">COMANDA #'+esc(o.number||o.id)+'</div><span class="badge '+bc+'">'+esc(bd)+'</span></div><div class="time">'+new Date(Number(o.createdAt||Date.now())).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})+'<br><span class="age">+'+age(am)+'</span></div></div><div class="lines">'+(lh||'<div class="note">Sin detalle de productos</div>')+'</div><div class="foot"><span class="age">'+esc(o.customerName||o.cliente||'')+'</span><span class="total">'+money(o.total)+'</span></div><button class="smallbtn statusbtn" data-status-id="'+esc(o.id)+'" data-status-next="'+esc(next)+'">'+esc(nextLabel)+'</button></article>'}).join('');ie.textContent=list.length+' comanda'+(list.length===1?'':'s')+' pendiente'+(list.length===1?'':'s')+' · actualización automática'}

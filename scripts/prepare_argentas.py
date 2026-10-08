@@ -4,7 +4,7 @@ source=root/"source"; assets=root/"app"/"src"/"main"/"assets"; assets.mkdir(pare
 parts=sorted(source.glob("argentas-original-*.part"))
 if not parts: raise SystemExit("No se encontraron partes de Argentas original")
 html="".join(p.read_text(encoding="utf-8") for p in parts)
-transport_file = "supabase-bridge.html" if __import__("os").environ.get("ARGENTAS_TRANSPORT") == "supabase" else "bluetooth-bridge.html"
+transport_file = "supabase-bridge.html"
 bridge=(source/transport_file).read_text(encoding="utf-8")
 overlay=(source/"comandas-overlay.html").read_text(encoding="utf-8")
 backup=(source/"backup-recovery.js").read_text(encoding="utf-8")

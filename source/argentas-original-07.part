@@ -954,18 +954,38 @@ if(products.length>2000)issues.push('catálogo de productos muy grande');
 if(sales.length>10000)issues.push('historial de ventas muy grande');var ids={};orders.forEach(function(x){if(!x||!x.id)issues.push('comanda sin ID');else if(ids[x.id])issues.push('comanda duplicada: '+x.id);else ids[x.id]=true;if(x&&typeof x.total!=='number'&&!Number.isFinite(Number(x.total)))issues.push('total inválido en comanda '+x.id)});products.forEach(function(x){if(!x||!x.id)issues.push('producto sin ID');if(x&&(!Number.isFinite(Number(x.price))||Number(x.price)<0))issues.push('precio inválido en producto '+(x&&x.id||'?'))});sales.forEach(function(x){if(!x||!x.id)issues.push('venta sin ID');if(x&&(!Number.isFinite(Number(x.total))||Number(x.total)<0))issues.push('total inválido en venta '+(x&&x.id||'?'))});var result={at:Date.now(),ok:issues.length===0,issues:issues.slice(0,20),orders:orders.length,products:products.length,sales:sales.length};try{localStorage.setItem(SYNC_HEALTH_KEY,JSON.stringify(result))}catch(e){}return result}
 loadSyncQueue();compactSyncQueue();healthCheck();
 try{localStorage.removeItem('argentas_comanda_status_queue_v1');localStorage.removeItem('argentas_pending_remote_statuses')}catch(e){}
-function loadReliableState(){
-  try{
-    var p=JSON.parse(localStorage.getItem('argentas_reliable_pending')||'null');
-    reliablePending=p&&p.type==='state'&&p.msgId?p:null;
-    reliableSeen=JSON.parse(localStorage.getItem('argentas_reliable_seen')||'{}');
-    if(!reliableSeen||typeof reliableSeen!=='object'||Array.isArray(reliableSeen))reliableSeen={};
-    var keys=Object.keys(reliableSeen);
-    if(keys.length>300){keys.sort(function(a,b){return Number(reliableSeen[a]||0)-Number(reliableSeen[b]||0)});keys.slice(0,keys.length-300).forEach(function(k){delete reliableSeen[k]});localStorage.setItem('argentas_reliable_seen',JSON.stringify(reliableSeen))}
-  }catch(e){reliablePending=null;reliableSeen={}}
-}
-function persistReliablePending(){try{if(reliablePending)localStorage.setItem('argentas_reliable_pending',JSON.stringify(reliablePending));else localStorage.removeItem('argentas_reliable_pending')}catch(e){}}
-function markReliableSeen(id){if(!id)return;reliableSeen[id]=Date.now();try{localStorage.setItem('argentas_reliable_seen',JSON.stringify(reliableSeen))}catch(e){}}
+var ArgentasReliableState=(function(){
+  'use strict';
+  function load(){
+    try{
+      var p=JSON.parse(localStorage.getItem('argentas_reliable_pending')||'null');
+      reliablePending=p&&p.type==='state'&&p.msgId?p:null;
+      reliableSeen=JSON.parse(localStorage.getItem('argentas_reliable_seen')||'{}');
+      if(!reliableSeen||typeof reliableSeen!=='object'||Array.isArray(reliableSeen))reliableSeen={};
+      var keys=Object.keys(reliableSeen);
+      if(keys.length>300){
+        keys.sort(function(a,b){return Number(reliableSeen[a]||0)-Number(reliableSeen[b]||0)});
+        keys.slice(0,keys.length-300).forEach(function(k){delete reliableSeen[k]});
+        localStorage.setItem('argentas_reliable_seen',JSON.stringify(reliableSeen))
+      }
+    }catch(e){reliablePending=null;reliableSeen={}}
+  }
+  function persistPending(){
+    try{
+      if(reliablePending)localStorage.setItem('argentas_reliable_pending',JSON.stringify(reliablePending));
+      else localStorage.removeItem('argentas_reliable_pending')
+    }catch(e){}
+  }
+  function markSeen(id){
+    if(!id)return;
+    reliableSeen[id]=Date.now();
+    try{localStorage.setItem('argentas_reliable_seen',JSON.stringify(reliableSeen))}catch(e){}
+  }
+  return Object.freeze({load:load,persistPending:persistPending,markSeen:markSeen});
+})();
+function loadReliableState(){return ArgentasReliableState.load()}
+function persistReliablePending(){return ArgentasReliableState.persistPending()}
+function markReliableSeen(id){return ArgentasReliableState.markSeen(id)}
 function buildStateMessage(){syncRevision++;return{type:'state',role:'caja',sessionId:syncSessionId,sessionStartedAt:syncSessionStartedAt,sentAt:Date.now(),revision:syncRevision,msgId:'s'+Date.now()+'-'+(++reliableSeq),db:db,sales:salesSnapshot(),caja:cajaSnapshot()}}
 function flushReliableState(){if(!connected||!window.ArgentasSupabaseTransport||!reliablePending)return;try{var q=syncQueue.find(function(x){return x.msgId===reliablePending.msgId});if(q){q.attempts++;q.lastSentAt=Date.now();saveSyncQueue()}window.ArgentasSupabaseTransport.send(JSON.stringify(reliablePending));syncDiag.lastSend=Date.now();syncDiag.sentStates++;diagSave();updateDiagnostics()}catch(e){syncDiag.lastError='No se pudo enviar el estado';diagSave();updateDiagnostics()}}
 /* Reconciliación autoritativa: la Pizarra recibe periódicamente la foto completa de la app. */ /* build-sync */

@@ -299,7 +299,10 @@ function ensureCustomizationModal(){
     var r=m.querySelector('input[name="ac-custom-cheese"]:checked');
     var type=customizationType(x);
     var cheese=r?r.value:null;
-    if(type==='hamburguesa'&&!cheese)cheese='none';
+    if(type==='hamburguesa'&&(cheese!=='none'&&cheese!=='cheddar'&&cheese!=='provoleta')){
+      alert('Seleccioná una opción de queso: Cheddar, Provoleta o Sin queso.');
+      return;
+    }
     if(type==='milanesa_con_queso'&&(cheese!=='cheddar'&&cheese!=='provoleta')){
       alert('Elegí Cheddar o Provoleta.');
       return;

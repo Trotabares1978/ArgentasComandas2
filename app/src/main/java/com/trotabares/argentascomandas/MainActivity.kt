@@ -9,6 +9,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.net.Uri
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebView
@@ -213,6 +214,16 @@ class MainActivity : AppCompatActivity() {
 
         @JavascriptInterface
         fun send(message: String) = sendCommand("send", message = message)
+
+        @JavascriptInterface
+        fun openExternalUrl(url: String) {
+            try {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                startActivity(intent)
+            } catch (_: Exception) {
+                // Si no hay navegador disponible, no navegamos el WebView.
+            }
+        }
     }
 
     override fun onRequestPermissionsResult(

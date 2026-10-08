@@ -48,6 +48,7 @@ function apply(raw){
           };
         }
       }
+      ackVenderSale(m.deliveryId||('vender-sale:'+String(s.id||'')));
     }else if(m.type==='comanda-status'&&m.id&&m.status){
       var c=orders[String(m.id)];
       if(c){

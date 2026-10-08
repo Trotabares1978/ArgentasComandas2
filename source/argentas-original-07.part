@@ -1058,7 +1058,17 @@ window.onSupabaseMessage=function(raw){raw.trim().split('\n').filter(Boolean).fo
     Object.keys(comandaStatusPending).forEach(function(key){var x=comandaStatusPending[key];if(x&&String(x.deliveryId)===String(m.deliveryId))delete comandaStatusPending[key]});
     saveComandaStatusPending();
     return
-  }else if(m.type==='state'){
+  }else if(m.type==='reconcile-request'){
+    /* La Pizarra nunca decide por sí sola qué existe: pide una foto fresca a la app. */
+    try{
+      if(m.requestId&&window.ArgentasSupabaseTransport){
+        var fresh=buildStateMessage();
+        fresh.reconcileFor=String(m.requestId);
+        window.ArgentasSupabaseTransport.send(JSON.stringify(fresh));
+      }
+    }catch(e){console.warn('No se pudo responder al cotejo de Pizarra',e)}
+    return
+  
     syncDiag.lastReceive=Date.now();syncDiag.receivedStates++;
     if(m.msgId&&reliableSeen[m.msgId]){
       if(window.ArgentasSupabaseTransport)try{window.ArgentasSupabaseTransport.send(JSON.stringify({type:'ack',msgId:m.msgId}))}catch(e){}

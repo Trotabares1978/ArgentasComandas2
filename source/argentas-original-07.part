@@ -1463,11 +1463,15 @@ setTimeout(connect,50);
     section.appendChild(online);
     var PIZARRA_URL='https://trotabares1978.github.io/ArgentasComandas2/pizarra.html?v=c5dd709';
     function openExternalUrl(url){
+      if(window.ArgentasNativeBluetooth&&typeof window.ArgentasNativeBluetooth.openExternalUrl==='function'){
+        window.ArgentasNativeBluetooth.openExternalUrl(url);
+        return;
+      }
       if(window.ArgentasAndroid&&typeof window.ArgentasAndroid.openExternalUrl==='function'){
         window.ArgentasAndroid.openExternalUrl(url);
         return;
       }
-      window.location.href=url;
+      alert('No se pudo abrir el navegador externo en este dispositivo.');
     }
     function openShareSheet(){
       var text='🧾 Pizarra de Comandas ARGENTAS\\nAbrí este enlace para ver las comandas online en tiempo real:\\n'+PIZARRA_URL;

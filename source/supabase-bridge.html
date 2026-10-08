@@ -21,7 +21,7 @@ try{
 var since=Number(localStorage.getItem('argentas_supabase_last_recovery')||0),cutoff=Math.max(since-120000,Date.now()-7*24*60*60*1000);
 var q=SUPABASE_URL+'/rest/v1/'+SUPABASE_TABLE+'?select=id,dispositivo,device_id,mensaje,created_at&created_at=gt.'+encodeURIComponent(new Date(cutoff).toISOString())+'&order=created_at.asc&limit=500';
 var res=await fetch(q,{headers:{'apikey':SUPABASE_KEY}});if(!res.ok)throw new Error('HTTP '+res.status);
-var rows=await res.json();rows.forEach(function(row){var sender=String(row.device_id||''),same=sender?sender===DEVICE_ID:String(row.dispositivo||'')===DEVICE_ROLE;if(!same&&row.mensaje)message(row.mensaje);var t=Date.parse(row.created_at||'');if(t)lastRecoveryAt=Math.max(lastRecoveryAt,t)});
+var rows=await res.json();rows.forEach(function(row){var sender=String(row.device_id||''),same=sender?sender===DEVICE_ID:String(row.dispositivo||'')===DEVICE_ROLE;if(!same&&row.mensaje){try{var parsed=JSON.parse(row.mensaje),type=String(parsed.type||'');if(type&&type!=='hello'&&type!=='hello-ack'&&type!=='ack'&&type!=='vender-ack'&&type!=='comanda-status-ack'&&type!=='order-update-ack')message(row.mensaje)}catch(e){}}var t=Date.parse(row.created_at||'');if(t)lastRecoveryAt=Math.max(lastRecoveryAt,t)});
 localStorage.setItem('argentas_supabase_last_recovery',String(Math.max(lastRecoveryAt,Date.now()-30000)));
 }catch(e){console.warn('Argentas Supabase recovery error',e)}
 }

@@ -10,7 +10,7 @@ function merge(o){if(!o||!o.id||o.status==='oculta')return;var id=String(o.id),c
 function apply(raw){
   try{
     var m=JSON.parse(raw);
-    if(m.type==='state'&&m.db&&Array.isArray(m.db.orders)){/* Los snapshots nunca borran una comanda ya vista; solo un estado terminal explícito la saca de pendientes. */m.db.orders.forEach(merge);}else if(m.type==='vender-sale'&&m.sale){
+    if(m.type==='state'&&m.db&&Array.isArray(m.db.orders)){if(m.role==='caja'){orders={};m.db.orders.forEach(merge)}else{m.db.orders.forEach(merge)}}else if(m.type==='vender-sale'&&m.sale){
       var s=m.sale,
           id='v'+String(s.comandaId||s.id),
           o=orders[id];

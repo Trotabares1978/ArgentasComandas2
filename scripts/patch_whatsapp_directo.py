@@ -69,7 +69,8 @@ replacement = r'''  function initWhatsappDirecto() {
 
   // ---------------------------------------------------------------
   // 2b) TÍTULO:'''
-new_html, count = pattern.subn(replacement, html, count=1)
+
+new_html, count = pattern.subn(lambda _m: replacement, html, count=1)
 if count != 1:
     raise SystemExit("No se encontró exactamente el bloque initWhatsappDirecto esperado; se cancela el parche para no tocar la 232.")
 

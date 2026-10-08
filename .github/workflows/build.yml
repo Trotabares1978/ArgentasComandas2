@@ -39,13 +39,16 @@ jobs:
             grep -q "function setStatus" app/src/main/assets/index.html
             grep -q "statusUpdatedAt" app/src/main/assets/index.html
             grep -q "function sync" app/src/main/assets/index.html
-            ! grep -q "argentas_comanda_status" app/src/main/assets/index.html
             ! grep -q "sendStatus" app/src/main/assets/index.html
             ! grep -q "onArgentasStatusMessage" app/src/main/assets/index.html
             ! grep -q "function sendComandaStatus" app/src/main/assets/index.html
             ! grep -q "order-update" app/src/main/assets/index.html
             ! grep -q "PROBAR NEARBY" app/src/main/assets/index.html
-            echo "OK: original Argentas UI + Supabase transport + comanda status via state channel"
+            grep -q "comanda-status" app/src/main/assets/index.html
+            grep -q "argentas_comanda_status_pending_v2" app/src/main/assets/index.html
+            ! grep -q "ArgentasNativeBluetooth" app/src/main/assets/index.html
+            ! grep -q "onBluetoothMessage" app/src/main/assets/index.html
+            echo "OK: original Argentas UI + Supabase transport + dedicated comanda status queue"
           fi
 
       - name: Prepare icon

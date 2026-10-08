@@ -28,14 +28,19 @@ function apply(raw){
           };
         }).filter(function(x){return x.qty>0});
         if(lines.length){
-          var max=Object.keys(orders).reduce(function(n,k){
-            return Math.max(n,Number(orders[k].number)||0);
-          },0);
           var stamp=s.timestamp?new Date(s.timestamp).getTime():Date.now();
+          var jornada=new Date(stamp);
+          if(jornada.getHours()<10)jornada.setDate(jornada.getDate()-1);
+          var day=jornada.getFullYear()+'-'+String(jornada.getMonth()+1).padStart(2,'0')+'-'+String(jornada.getDate()).padStart(2,'0');
+          var max=Object.keys(orders).reduce(function(n,k){
+            var existing=orders[k];
+            return String(existing&&existing.day||'')===day
+              ?Math.max(n,Number(existing.number)||0):n;
+          },0);
           orders[id]={
             id:id,
             number:max+1,
-            day:new Date(stamp).toISOString().slice(0,10),
+            day:day,
             lines:lines,
             total:Number(s.total)||0,
             status:'recibido',

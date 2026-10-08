@@ -1087,7 +1087,7 @@ window.onSupabaseMessage=function(raw){raw.trim().split('\n').filter(Boolean).fo
       }
     }catch(e){console.warn('No se pudo responder al cotejo de Pizarra',e)}
     return
-  
+  }else if(m.type==='state'){
     syncDiag.lastReceive=Date.now();syncDiag.receivedStates++;
     if(m.msgId&&reliableSeen[m.msgId]){
       if(window.ArgentasSupabaseTransport)try{window.ArgentasSupabaseTransport.send(JSON.stringify({type:'ack',msgId:m.msgId}))}catch(e){}

@@ -316,10 +316,20 @@ var customizationPendingProduct=null;
 var customizationEditing=null;
 function closeCustomization(){customizationEditing=null;var m=document.getElementById('ac-custom-modal');if(m)m.style.display='none';customizationPendingProduct=null}
 function addConfiguredProduct(x,noLechuga,noTomate,cheese){
+  var type=customizationType(x);
+  if(type==='hamburguesa'&&(cheese!=='none'&&cheese!=='cheddar'&&cheese!=='provoleta')){
+    alert('Seleccioná una opción de queso: Cheddar, Provoleta o Sin queso.');
+    return false;
+  }
+  if(type==='milanesa_con_queso'&&(cheese!=='cheddar'&&cheese!=='provoleta')){
+    alert('Elegí Cheddar o Provoleta.');
+    return false;
+  }
   var line={productId:x.id,name:x.name,price:x.price,qty:1,noLechuga:!!noLechuga,noTomate:!!noTomate,cheese:cheese||null};
   var same=draft.find(function(y){return y.productId===line.productId&&Number(y.price)===Number(line.price)&&!!y.noLechuga===line.noLechuga&&!!y.noTomate===line.noTomate&&(y.cheese||null)===(line.cheese||null)});
   if(same)same.qty++;else draft.push(line);
   renderDraft();
+  return true;
 }
 function openCustomization(x,type,existing,editContext){
   var m=ensureCustomizationModal(),title=m.querySelector('#ac-custom-title'),prod=m.querySelector('#ac-custom-product'),l=m.querySelector('#ac-custom-lechuga'),t=m.querySelector('#ac-custom-tomate'),box=m.querySelector('#ac-custom-cheese');
@@ -356,7 +366,24 @@ function renderDraft(){
   e.querySelectorAll('[data-i][data-d]').forEach(function(b){b.onclick=function(){var i=Number(b.dataset.i),d=Number(b.dataset.d);draft[i].qty+=d;if(draft[i].qty<=0)draft.splice(i,1);renderDraft()}});
   document.getElementById('ac-total').textContent=''
 }
-function validateComandaLines(lines){var bad=null;(lines||[]).forEach(function(line){if(bad)return;var type=customizationType(line);if(type==='milanesa_con_queso'&&(line.cheese!=='cheddar'&&line.cheese!=='provoleta'))bad=line});if(bad){alert('No se puede cerrar el pedido: la Milanesa con queso requiere elegir Cheddar o Provoleta.');return false}return true}
+function validateComandaLines(lines){
+  var badHamburguesa=null,badMilanesaQueso=null;
+  (lines||[]).forEach(function(line){
+    if(badHamburguesa||badMilanesaQueso)return;
+    var type=customizationType(line);
+    if(type==='hamburguesa'&&(line.cheese!=='none'&&line.cheese!=='cheddar'&&line.cheese!=='provoleta'))badHamburguesa=line;
+    else if(type==='milanesa_con_queso'&&(line.cheese!=='cheddar'&&line.cheese!=='provoleta'))badMilanesaQueso=line;
+  });
+  if(badHamburguesa){
+    alert('No se puede cerrar el pedido: la hamburguesa requiere elegir Cheddar, Provoleta o Sin queso.');
+    return false;
+  }
+  if(badMilanesaQueso){
+    alert('No se puede cerrar el pedido: la Milanesa con queso requiere elegir Cheddar o Provoleta.');
+    return false;
+  }
+  return true;
+}
 async function createOrder(){if(!draft.length)return;var lines=JSON.parse(JSON.stringify(draft));if(!validateComandaLines(lines))return;var total=Number(sum(lines))||0;if(!window.argentasCheckoutPayment){alert('No está disponible el cobro de cierre.');return}lines.forEach(function(x){x.note=customizationNote(x)});var result=await window.argentasCheckoutPayment(total);if(!result)return;if(Number(result.faltante||0)>0){alert('El pedido todavía no está cobrado completo. Falta '+money(result.faltante)+'.');return}var now=Date.now(),day=todayKey(),n=nextDailyNumber(day),id='o'+now+Math.random().toString(36).slice(2,7),method=(Number(result.transferencia||0)>0&&Number(result.efectivo||0)>0)?'Combinada':(Number(result.transferencia||0)>0?'Transferencia':'Efectivo'),order={id:id,number:n,day:day,lines:lines,total:total,status:'recibido',statusUpdatedAt:now,paid:true,paymentMethod:method,efectivo:Number(result.efectivo)||0,transferencia:Number(result.transferencia)||0,vuelto:Number(result.vuelto)||0,faltante:0,faltanteBonificado:false,paidAt:now,source:'comandas',createdAt:now,updatedAt:now};db.orders.unshift(order);draft=[];save();importOrdersToCaja([order]);rememberAction({type:'create',id:id,label:'crear comanda #'+n});renderNew();renderOrders();renderUndo();sync();}
 function todayKey(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function nextDailyNumber(day){var nums=db.orders.filter(function(o){return String(o.day||'')===day}).map(function(o){return Number(o.number)||0});return (nums.length?Math.max.apply(null,nums):0)+1}

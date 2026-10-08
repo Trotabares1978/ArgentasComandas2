@@ -60,7 +60,17 @@ else{var sender=String(row.device_id||''),same=sender?sender===DEVICE_ID:String(
 ws.onerror=function(){state('DESCONECTADO','Error de conexión con Supabase')};
 ws.onclose=function(){joined=false;stopHeartbeat();if(!closing){state('CONECTANDO','Reconectando con Supabase…');schedule()}};
 }
-window.ArgentasSupabaseTransport={connect:connect,sendStatus:function(ev){return postStatus(ev)},recoverStatus:recoverStatusRecent,if(!raw)return;return postMessage(String(raw)).catch(function(e){console.warn('Argentas Supabase send error',e);state('CONECTADO','Conectado · envío pendiente');throw e})},recover:recoverRecent,getDeviceId:function(){return DEVICE_ID}};
+window.ArgentasSupabaseTransport={
+  connect:connect,
+  send:function(raw){
+    if(!raw)return Promise.resolve();
+    return postMessage(String(raw)).catch(function(e){console.warn('Argentas Supabase send error',e);state('CONECTADO','Conectado · envío pendiente');throw e});
+  },
+  sendStatus:function(ev){return postStatus(ev)},
+  recover:recoverRecent,
+  recoverStatus:recoverStatusRecent,
+  getDeviceId:function(){return DEVICE_ID}
+};
 
 setTimeout(connect,50);
 })();

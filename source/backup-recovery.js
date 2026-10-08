@@ -229,17 +229,23 @@
     online.innerHTML='<b>🧾 Pizarra de comandas online</b><div class="ac-muted" style="margin-top:8px">Abrí la pizarra desde cualquier teléfono o compartí su dirección por WhatsApp, Messenger u otra aplicación.</div><div class="ac-actions"><button type="button" class="ac-btn ac-primary" id="ac-open-pizarra">🧾 ABRIR PIZARRA</button><button type="button" class="ac-btn ac-dark" id="ac-share-pizarra">📤 COMPARTIR PIZARRA</button></div>';
     section.appendChild(online);
     var PIZARRA_URL='https://trotabares1978.github.io/ArgentasComandas2/pizarra.html';
-    document.getElementById('ac-open-pizarra').onclick=function(){window.open(PIZARRA_URL,'_blank')};
-    document.getElementById('ac-share-pizarra').onclick=function(){
-      var data={title:'Argentas · Pizarra de Comandas',text:'🧾 Pizarra de Comandas ARGENTAS\\nAbrí este enlace para ver las comandas online en tiempo real:\\n'+PIZARRA_URL,url:PIZARRA_URL};
-      if(navigator.share){navigator.share(data).catch(function(e){if(e&&e.name!=='AbortError')copyPizarra()})}else copyPizarra();
-    };
-    function copyPizarra(){
-      try{navigator.clipboard.writeText(PIZARRA_URL).then(function(){alert('Dirección de la pizarra copiada. Ya podés pegarla en WhatsApp, Messenger, etc.')},function(){fallbackCopy()})}catch(e){fallbackCopy()}
+    function openExternalUrl(url){
+      var intent='intent://'+url.replace(/^https?:\\/\\//,'')+'#Intent;scheme=https;action=android.intent.action.VIEW;end';
+      try{window.location.href=intent}catch(e){window.open(url,'_blank')}
     }
-    function fallbackCopy(){
-      var t=document.createElement('textarea');t.value=PIZARRA_URL;t.style.position='fixed';t.style.opacity='0';document.body.appendChild(t);t.select();try{document.execCommand('copy');alert('Dirección de la pizarra copiada. Ya podés pegarla donde quieras.')}catch(e){alert(PIZARRA_URL)}t.remove();
+    function openShareSheet(){
+      var text='🧾 Pizarra de Comandas ARGENTAS\\nAbrí este enlace para ver las comandas online en tiempo real:\\n'+PIZARRA_URL;
+      if(navigator.share){
+        navigator.share({title:'Argentas · Pizarra de Comandas',text:text,url:PIZARRA_URL}).catch(function(e){if(e&&e.name!=='AbortError')androidShare(text)})
+      }else androidShare(text);
     }
+    function androidShare(text){
+      var encodedText=encodeURIComponent(text).replace(/%20/g,'%20');
+      var intent='intent:#Intent;action=android.intent.action.SEND;type=text/plain;S.android.intent.extra.TEXT='+encodedText+';S.android.intent.extra.TITLE='+encodeURIComponent('Argentas · Pizarra de Comandas')+';end';
+      try{window.location.href=intent}catch(e){alert('No se pudo abrir el menú de compartir.')}
+    }
+    document.getElementById('ac-open-pizarra').onclick=function(){openExternalUrl(PIZARRA_URL)};
+    document.getElementById('ac-share-pizarra').onclick=openShareSheet;
   }
 
   installStorageWatch();

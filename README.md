@@ -1,16 +1,24 @@
-# Argentas
+# ArgentasComandas2
 
-Versión Android de Argentas que conserva la aplicación original y suma un módulo de Comandas.
+Versión Android de Argentas que conserva la aplicación original y suma el módulo de Comandas.
 
 - Misma base visual y funcional de Argentas.
 - Comandas para tomar, preparar, cobrar, entregar y anular pedidos.
 - La misma APK se adapta a celular y tablet Android.
-- Sincronización bidireccional directa entre los dos equipos mediante Wi-Fi Direct + TCP.
-- Ambos equipos ejecutan la misma aplicación y pueden enviar y recibir información.
-- El transporte Wi-Fi Direct/TCP vive en un servicio foreground persistente, separado de la Activity, para que la conexión pueda sobrevivir a la recreación o cierre de la interfaz.
-- Ante una pérdida del enlace, el servicio conserva el último dispositivo conocido y busca automáticamente la reconexión cuando vuelve a estar disponible.
-- La sincronización usa mensajes persistentes, confirmación (ACK), reintentos y deduplicación para evitar perder cambios cuando la conexión se corta.
+- **supabase-online usa Supabase como transporte online exclusivo.**
+- Sincronización bidireccional entre los equipos: cualquiera puede enviar y recibir cambios.
+- Cada instalación conserva un device_id persistente para distinguir dispositivos aunque tengan el mismo tipo de pantalla.
+- La conexión Realtime se recupera automáticamente y dispone de heartbeat y recuperación de mensajes recientes.
+- Los estados de las comandas tienen un canal liviano propio (comanda-status) con cola persistente, reintentos y ACK; la sincronización completa queda como respaldo.
+- La sincronización completa usa mensajes persistentes, ACK, reintentos y deduplicación.
 - Las comandas recibidas se incorporan a las ventas de la caja diaria una sola vez y, al cobrar, registran efectivo o transferencia.
-- La fuente original se reconstruye automáticamente durante el build desde `source/argentas-original-*.part`.
+- El respaldo local permite guardar y restaurar los datos de Argentas-Comandas.
+- La fuente original se reconstruye automáticamente durante el build desde source/argentas-original-*.part.
+- La rama main conserva el transporte local original y no debe modificarse desde este flujo.
+- El APK de prueba se genera automáticamente mediante GitHub Actions.
 
-El APK de prueba se genera automáticamente mediante GitHub Actions.
+## Rama supabase-online
+
+Esta es la rama de desarrollo online. El puente activo es source/supabase-bridge.html y el generador fija explícitamente ese transporte en scripts/prepare_argentas.py.
+
+La tabla de transporte es public.argentas_conexion, protegida mediante RLS y limitada a las operaciones cliente necesarias para la sincronización.

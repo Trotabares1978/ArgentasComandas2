@@ -1592,5 +1592,73 @@ setTimeout(connect,50);
   window.argentasRestore=restore;
   window.argentasSyncTombstones=tombstones;
 })();</script>
-</body>
+<script id="argentas-monthly-history">
+(function(){
+  "use strict";
+  function money(v){
+    try{return new Intl.NumberFormat("es-AR",{style:"currency",currency:"ARS",maximumFractionDigits:0}).format(Number(v)||0)}
+    catch(e){return "$ "+Math.round(Number(v)||0)}
+  }
+  function build(){
+    var banners=[].slice.call(document.querySelectorAll("div")).filter(function(el){
+      return (el.textContent||"").trim()==="🔒Historial protegido: cada cierre se borra individualmente con confirmación. No hay borrado total.";
+    });
+    var banner=banners[0];
+    if(!banner)return;
+    var parent=banner.parentElement;
+    if(!parent||parent.querySelector("#argentas-monthly-history-card"))return;
+    var closures=[];
+    try{closures=JSON.parse(localStorage.getItem("argentas_closures")||"[]")}catch(e){closures=[]}
+    if(!Array.isArray(closures)||!closures.length)return;
+    var months={};
+    closures.forEach(function(c){
+      var d=new Date(c.closedAt||c.date||Date.now());
+      if(isNaN(d.getTime()))return;
+      var key=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
+      var net=Number(c.totals&&c.totals.netProfit)||0;
+      if(!months[key])months[key]={net:0,capitalization:0,partnerShare:0};
+      months[key].net+=net;
+      months[key].capitalization+=Number(c.totals&&c.totals.capitalization)||Math.max(0,net)*0.10;
+      months[key].partnerShare+=Number(c.totals&&c.totals.partnerShare)||Math.max(0,net)*0.45;
+    });
+    var keys=Object.keys(months).sort().reverse();
+    if(!keys.length)return;
+    var card=document.createElement("div");
+    card.id="argentas-monthly-history-card";
+    card.className="bg-black rounded-[20px] border border-[#E8B84A]/30 p-4 mb-3";
+    var title=document.createElement("div");
+    title.className="font-display text-[13px] tracking-widest text-[#E8B84A]";
+    title.textContent="RESUMEN MENSUAL";
+    card.appendChild(title);
+    var sub=document.createElement("div");
+    sub.className="text-[10px] text-zinc-500 mt-1";
+    sub.textContent="Acumulado de los cierres guardados";
+    card.appendChild(sub);
+    keys.forEach(function(key){
+      var parts=key.split("-"),date=new Date(Number(parts[0]),Number(parts[1])-1,1);
+      var row=document.createElement("div");
+      row.className="bg-[#141414] rounded-xl border border-zinc-800 p-3 mt-2";
+      var name=document.createElement("div");
+      name.className="font-black text-[11px] text-white uppercase";
+      name.textContent=date.toLocaleDateString("es-AR",{month:"long",year:"numeric"});
+      row.appendChild(name);
+      var grid=document.createElement("div");
+      grid.className="grid grid-cols-3 gap-2 mt-2";
+      [["GANANCIA NETA",months[key].net],["CAPITALIZACIÓN (10%)",months[key].capitalization],["A CADA SOCIO (45%)",months[key].partnerShare]].forEach(function(item){
+        var cell=document.createElement("div"),lab=document.createElement("div"),val=document.createElement("div");
+        lab.className="text-[8px] text-zinc-500 font-black tracking-widest";
+        lab.textContent=item[0];
+        val.className="font-display text-white mt-1";
+        val.textContent=money(item[1]);
+        cell.appendChild(lab);cell.appendChild(val);grid.appendChild(cell);
+      });
+      row.appendChild(grid);card.appendChild(row);
+    });
+    parent.insertBefore(card,banner.nextSibling);
+  }
+  var tries=0,timer=setInterval(function(){build();if(++tries>40)clearInterval(timer)},500);
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",build,{once:true});
+  else build();
+})();
+</script></body>
 </html>

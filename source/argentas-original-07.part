@@ -934,18 +934,26 @@ function stableSignature(x){try{return JSON.stringify(x,function(k,v){return k==
 function mergeSales(remote){var local=salesSnapshot(),map=new Map(local.map(function(s){return[String(s.id||s.comandaId||JSON.stringify(s)),s]})),changed=false;(remote||[]).forEach(function(s){var key=String(s.id||s.comandaId||JSON.stringify(s)),l=map.get(key),rv=recordVersion(s),lv=recordVersion(l);if(!l||rv>lv||(rv===lv&&stableSignature(s)>stableSignature(l))){map.set(key,s);changed=true}});if(!changed)return false;var merged=Array.from(map.values());try{localStorage.setItem('argentas_sales',JSON.stringify(merged));window.dispatchEvent(new Event('argentas-sales-sync'))}catch(e){console.warn('No se pudieron guardar ventas sincronizadas',e)}return true}
 function cajaSnapshot(){var out={};['argentas_cash','argentas_expenses','argentas_closures'].forEach(function(k){try{var v=JSON.parse(localStorage.getItem(k)||'null');if(v!==null)out[k]=v}catch(e){}});return out}
 function mergeCajaSnapshot(remote){if(!remote||typeof remote!=='object')return false;var changed=false;Object.keys(remote).forEach(function(k){if(k==='argentas_sales')return;var rv=remote[k];try{var lv=JSON.parse(localStorage.getItem(k)||'null');if(Array.isArray(rv)){var arr=Array.isArray(lv)?lv:[],map=new Map(arr.map(function(x){return[String(x&&x.id||x&&x.timestamp||x&&x.fecha||JSON.stringify(x)),x]}));rv.forEach(function(x){var id=String(x&&x.id||x&&x.timestamp||x&&x.fecha||JSON.stringify(x)),old=map.get(id);if(!old||recordVersion(x)>recordVersion(old)||(recordVersion(x)===recordVersion(old)&&stableSignature(x)>stableSignature(old))){map.set(id,x);changed=true}});var merged=Array.from(map.values());if(JSON.stringify(arr)!==JSON.stringify(merged))localStorage.setItem(k,JSON.stringify(merged));}else if(rv&&typeof rv==='object'){var clean=Object.assign({},rv);delete clean.__argentasSyncAt;var local=lv&&typeof lv==='object'?Object.assign({},lv):null;if(local)delete local.__argentasSyncAt;var openedRemote=String(clean.openedAt||''),openedLocal=String(local&&local.openedAt||'');var remoteV=recordVersion(clean),localV=recordVersion(local);var take=!local||(remoteV>localV)||(remoteV===localV&&openedRemote&&openedRemote>openedLocal)||(remoteV===localV&&openedRemote===openedLocal&&Boolean(local&&local.isOpen)!==Boolean(clean.isOpen)&&clean.isOpen===false);if(take){localStorage.setItem(k,JSON.stringify(clean));changed=true}}}catch(e){}});if(changed)window.dispatchEvent(new Event('argentas-caja-sync'));return changed}var reliablePending=null,reliableSeq=0,reliableSeen={},syncQueue=[],SYNC_QUEUE_KEY='argentas_sync_queue_v1',SYNC_HEALTH_KEY='argentas_sync_health_v1',syncSessionId='app_'+Date.now()+'_'+Math.random().toString(36).slice(2,10),syncSessionStartedAt=Date.now(),syncRevision=0,activeRemoteSessionId='',activeRemoteSessionStartedAt=0,activeRemoteRevision=0;
-function loadSyncQueue(){try{var q=JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY)||'[]');syncQueue=Array.isArray(q)?q:[]}catch(e){syncQueue=[]}}
-function saveSyncQueue(){try{localStorage.setItem(SYNC_QUEUE_KEY,JSON.stringify(syncQueue))}catch(e){}}
-function compactSyncQueue(){var changed=false;syncQueue=syncQueue.filter(function(x){if(!x||!x.msgId){changed=true;return false}return true});if(changed)saveSyncQueue()}
-function queueSnapshot(msg){if(!msg||!msg.msgId)return;syncQueue.push({msgId:msg.msgId,createdAt:Date.now(),attempts:0});if(syncQueue.length>20)syncQueue=syncQueue.slice(-20);saveSyncQueue()}
-function ackQueue(id){if(!id)return;syncQueue=syncQueue.filter(function(x){return x.msgId!==id});saveSyncQueue()}
+var ArgentasSyncState=(function(){
+  'use strict';
+  function loadQueue(){try{var q=JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY)||'[]');syncQueue=Array.isArray(q)?q:[]}catch(e){syncQueue=[]}}
+  function saveQueue(){try{localStorage.setItem(SYNC_QUEUE_KEY,JSON.stringify(syncQueue))}catch(e){}}
+  function compactQueue(){var changed=false;syncQueue=syncQueue.filter(function(x){if(!x||!x.msgId){changed=true;return false}return true});if(changed)saveQueue()}
+  function queueSnapshot(msg){if(!msg||!msg.msgId)return;syncQueue.push({msgId:msg.msgId,createdAt:Date.now(),attempts:0});if(syncQueue.length>20)syncQueue=syncQueue.slice(-20);saveQueue()}
+  function ackQueue(id){if(!id)return;syncQueue=syncQueue.filter(function(x){return x.msgId!==id});saveQueue()}
+  return Object.freeze({loadQueue:loadQueue,saveQueue:saveQueue,compactQueue:compactQueue,queueSnapshot:queueSnapshot,ackQueue:ackQueue});
+})();
+function loadSyncQueue(){return ArgentasSyncState.loadQueue()}
+function saveSyncQueue(){return ArgentasSyncState.saveQueue()}
+function compactSyncQueue(){return ArgentasSyncState.compactQueue()}
+function queueSnapshot(msg){return ArgentasSyncState.queueSnapshot(msg)}
+function ackQueue(id){return ArgentasSyncState.ackQueue(id)}
 function healthCheck(){var issues=[],orders=Array.isArray(db.orders)?db.orders:[],products=Array.isArray(db.products)?db.products:[],sales=salesSnapshot();
 if(orders.length>5000)issues.push('historial de comandas muy grande');
 if(products.length>2000)issues.push('catálogo de productos muy grande');
 if(sales.length>10000)issues.push('historial de ventas muy grande');var ids={};orders.forEach(function(x){if(!x||!x.id)issues.push('comanda sin ID');else if(ids[x.id])issues.push('comanda duplicada: '+x.id);else ids[x.id]=true;if(x&&typeof x.total!=='number'&&!Number.isFinite(Number(x.total)))issues.push('total inválido en comanda '+x.id)});products.forEach(function(x){if(!x||!x.id)issues.push('producto sin ID');if(x&&(!Number.isFinite(Number(x.price))||Number(x.price)<0))issues.push('precio inválido en producto '+(x&&x.id||'?'))});sales.forEach(function(x){if(!x||!x.id)issues.push('venta sin ID');if(x&&(!Number.isFinite(Number(x.total))||Number(x.total)<0))issues.push('total inválido en venta '+(x&&x.id||'?'))});var result={at:Date.now(),ok:issues.length===0,issues:issues.slice(0,20),orders:orders.length,products:products.length,sales:sales.length};try{localStorage.setItem(SYNC_HEALTH_KEY,JSON.stringify(result))}catch(e){}return result}
 loadSyncQueue();compactSyncQueue();healthCheck();
 try{localStorage.removeItem('argentas_comanda_status_queue_v1');localStorage.removeItem('argentas_pending_remote_statuses')}catch(e){}
-
 function loadReliableState(){
   try{
     var p=JSON.parse(localStorage.getItem('argentas_reliable_pending')||'null');

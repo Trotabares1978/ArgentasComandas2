@@ -1086,7 +1086,7 @@ function sendVenderAck(deliveryId){
   if(!deliveryId||!window.ArgentasSupabaseTransport)return;
   try{window.ArgentasSupabaseTransport.send(JSON.stringify({type:'vender-ack',deliveryId:String(deliveryId)}))}catch(e){}
 }
-window.onSupabaseMessage=function(raw){raw.trim().split('\n').filter(Boolean).forEach(function(line){try{
+var ArgentasSyncMessageRouter=(function(){'use strict';return Object.freeze({handle:function(raw){raw.trim().split('\n').filter(Boolean).forEach(function(line){try{
   var m=JSON.parse(line);
   if(m.type==='vender-draft'&&m.draft){
     var draftId='v'+String(m.draft.id),knownDraft=db.orders.some(function(o){return o&&o.id===draftId&&o.source==='vender'});
@@ -1188,6 +1188,8 @@ window.onSupabaseMessage=function(raw){raw.trim().split('\n').filter(Boolean).fo
     if(connected){flushReliableState()}
   }
 }catch(e){console.warn('Mensaje de sincronización inválido',e)}})}
+})})();
+window.onSupabaseMessage=function(raw){return ArgentasSyncMessageRouter.handle(raw)};
 document.addEventListener('click',function(e){if(e.target&&e.target.id==='ac-diagnostics')toggleDiagnostics()});
 window.addEventListener('argentas-products-sync',function(){if(!syncing)refreshProductsFromArgentas()});
 function openArgentasComandas(){var p=document.getElementById('argentas-comandas-panel');if(!p)return;p.classList.add('open');try{refreshProductsFromArgentas()}catch(e){console.warn('No se pudieron actualizar productos al abrir Comandas',e)}try{importVenderDraftFromStorage()}catch(e){console.warn('No se pudo importar el pedido de Vender al abrir Comandas',e)}try{importNewVenderSales()}catch(e){console.warn('No se pudieron importar ventas al abrir Comandas',e)}try{importOrdersToCaja(db.orders)}catch(e){console.warn('No se pudo actualizar Caja al abrir Comandas',e)}try{renderAll()}catch(e){console.warn('Fallo general al renderizar Comandas',e)}try{renderOrders()}catch(e){console.warn('Fallo al renderizar la lista de Comandas',e)}var listTab=document.querySelector('#argentas-comandas-panel .ac-tabs button[data-ac-tab="lista"]');if(listTab)listTab.click();try{renderOrders()}catch(e){console.warn('Fallo final al renderizar la lista de Comandas',e)}}document.getElementById('argentas-comandas-launcher').onclick=openArgentasComandas;document.getElementById('argentas-comandas-mobile-tab').onclick=openArgentasComandas;window.addEventListener('open-argentas-comandas',openArgentasComandas);window.openArgentasComandas=openArgentasComandas;document.addEventListener('click',function(e){var b=e.target&&e.target.closest&&e.target.closest('#argentas-comandas-mobile-tab,#argentas-comandas-launcher');if(b){e.preventDefault();e.stopPropagation();openArgentasComandas()}},true);

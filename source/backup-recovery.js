@@ -230,19 +230,23 @@
     section.appendChild(online);
     var PIZARRA_URL='https://trotabares1978.github.io/ArgentasComandas2/pizarra.html';
     function openExternalUrl(url){
-      var intent='intent://'+url.replace(/^https?:\/\//,'')+'#Intent;scheme=https;action=android.intent.action.VIEW;end';
-      try{window.location.href=intent}catch(e){window.open(url,'_blank')}
+      if(window.ArgentasAndroid&&typeof window.ArgentasAndroid.openExternalUrl==='function'){
+        window.ArgentasAndroid.openExternalUrl(url);
+        return;
+      }
+      window.location.href=url;
     }
     function openShareSheet(){
       var text='🧾 Pizarra de Comandas ARGENTAS\\nAbrí este enlace para ver las comandas online en tiempo real:\\n'+PIZARRA_URL;
+      if(window.ArgentasAndroid&&typeof window.ArgentasAndroid.shareText==='function'){
+        window.ArgentasAndroid.shareText('Argentas · Pizarra de Comandas',text);
+        return;
+      }
       if(navigator.share){
-        navigator.share({title:'Argentas · Pizarra de Comandas',text:text,url:PIZARRA_URL}).catch(function(e){if(e&&e.name!=='AbortError')androidShare(text)})
-      }else androidShare(text);
-    }
-    function androidShare(text){
-      var encodedText=encodeURIComponent(text).replace(/%20/g,'%20');
-      var intent='intent:#Intent;action=android.intent.action.SEND;type=text/plain;S.android.intent.extra.TEXT='+encodedText+';S.android.intent.extra.TITLE='+encodeURIComponent('Argentas · Pizarra de Comandas')+';end';
-      try{window.location.href=intent}catch(e){alert('No se pudo abrir el menú de compartir.')}
+        navigator.share({title:'Argentas · Pizarra de Comandas',text:text,url:PIZARRA_URL}).catch(function(e){if(e&&e.name!=='AbortError')alert('No se pudo abrir el menú de compartir.')});
+        return;
+      }
+      alert('La función de compartir no está disponible en este dispositivo.');
     }
     document.getElementById('ac-open-pizarra').onclick=function(){openExternalUrl(PIZARRA_URL)};
     document.getElementById('ac-share-pizarra').onclick=openShareSheet;

@@ -522,51 +522,35 @@ if(existing&&Array.isArray(existing.lines)){
 if(existing){if(!lines.length){var ei=db.orders.indexOf(existing);if(ei>=0)db.orders.splice(ei,1);save();renderAll();sync();return true}var incomingMethod=s.paymentMethod||s.formaPago||s.medioPago||s.payment_method||null;if(existing.lines&&JSON.stringify(existing.lines)===JSON.stringify(lines)&&Number(existing.total||0)===Number(s.total||0)&&String(existing.paymentMethod||'')===String(incomingMethod||''))return true;existing.lines=lines;existing.total=Number(s.total)||0;if(paymentMethodOf(s))existing.paymentMethod=incomingMethod;existing.updatedAt=Date.now();save();importOrdersToCaja([existing]);renderAll();sync();maybeOpenPaymentForVender(s,id);return true}if(!lines.length)return false;var now=Date.now(),day=todayKey(),jornada=jornadaKey(now),n=nextJornadaNumber(jornada);db.orders.unshift({id:id,number:n,day:day,jornada:jornada,lines:lines,total:Number(s.total)||0,status:'recibido',paid:false,paymentMethod:(s.paymentMethod||s.formaPago||s.medioPago||s.payment_method||null),createdAt:s.timestamp?new Date(s.timestamp).getTime():now,updatedAt:now,source:'vender'});save();importOrdersToCaja(db.orders);renderAll();sync();maybeOpenPaymentForVender(s,id);return true}
 function registerVenderSale(s){if(!s||!s.id)return false;if(s.origen==='Comandas'||s.tipo==='comanda')return false;var linkedId=s.comandaId?String(s.comandaId):String(s.id),id='v'+linkedId,existing=db.orders.find(function(o){return o.id===id||String(o.source||'')==='vender'&&String(o.venderSaleId||'')===String(s.id)});if(!existing){var lines=(s.items||[]).map(function(x){return{productId:String(x.productId||x.id||''),name:String(x.name||''),price:Number(x.price)||0,cost:Number(x.cost)||0,qty:Number(x.qty)||0,note:String(x.note||''),noLechuga:!!x.noLechuga,noTomate:!!x.noTomate,cheese:String(x.cheese||'')}}).filter(function(x){return x.qty>0});if(!lines.length)return false;var now=Date.now(),day=todayKey(),jornada=jornadaKey(now),n=nextJornadaNumber(jornada);existing={id:id,number:n,day:day,jornada:jornada,lines:lines,total:Number(s.total)||0,status:'recibido',paid:true,paymentMethod:s.paymentMethod||'Efectivo',efectivo:Number(s.efectivo)||0,transferencia:Number(s.transferencia)||0,createdAt:Number(s.timestamp)||Date.parse(s.date||s.fecha||'')||now,updatedAt:now,source:'vender',venderSaleId:String(s.id)};db.orders.unshift(existing);save();importOrdersToCaja([existing]);renderAll();sync();return true;}var lines=(s.items||existing.lines||[]).map(function(x){return{productId:String(x.productId||x.id||''),name:String(x.name||''),price:Number(x.price)||0,qty:Number(x.qty)||0,note:String(x.note||''),noLechuga:!!x.noLechuga,noTomate:!!x.noTomate,cheese:String(x.cheese||'')}}).filter(function(x){return x.qty>0});if(JSON.stringify(existing.lines||[])===JSON.stringify(lines)&&Number(existing.total||0)===Number(s.total||existing.total||0)&&existing.paid===true&&String(existing.paymentMethod||'')===String(s.paymentMethod||existing.paymentMethod||'')&&Number(existing.efectivo||0)===Number(s.efectivo||0)&&Number(existing.transferencia||0)===Number(s.transferencia||0))return false;existing.lines=lines;existing.total=Number(s.total)||existing.total||0;existing.paid=true;existing.paymentMethod=s.paymentMethod||existing.paymentMethod||'Efectivo';existing.efectivo=Number(s.efectivo)||0;existing.transferencia=Number(s.transferencia)||0;existing.updatedAt=Date.now();save();importOrdersToCaja([existing]);renderAll();sync();return true}
 var VENDER_DIRECT_QUEUE_KEY='argentas_vender_direct_pending_v1';
-function loadVenderDirectPending(){
-  try{
-    var q=JSON.parse(localStorage.getItem(VENDER_DIRECT_QUEUE_KEY)||'{}');
-    return q&&typeof q==='object'&&!Array.isArray(q)?q:{}
-  }catch(e){return {}}
-}
-function saveVenderDirectPending(){
-  try{localStorage.setItem(VENDER_DIRECT_QUEUE_KEY,JSON.stringify(venderDirectPending))}catch(e){}
-}
-var venderDirectPending=loadVenderDirectPending();
-function flushVenderDirect(key){
-  var x=venderDirectPending[key];
-  if(!x||!connected||!window.ArgentasSupabaseTransport||typeof window.ArgentasSupabaseTransport.send!=='function')return false;
-  try{
-    x.attempts=Number(x.attempts||0)+1;
-    x.lastAttemptAt=Date.now();
-    window.ArgentasSupabaseTransport.send(JSON.stringify({
-      type:x.type,
-      draft:x.type==='vender-draft'?x.payload:undefined,
-      sale:x.type==='vender-sale'?x.payload:undefined,
-      deliveryId:key
-    }));
-    saveVenderDirectPending();
-    return true
-  }catch(e){
-    x.lastError=String(e&&e.message||e);
-    saveVenderDirectPending();
-    return false
+var ArgentasVenderSync=(function(){'use strict';
+  function load(){try{var q=JSON.parse(localStorage.getItem(VENDER_DIRECT_QUEUE_KEY)||'{}');return q&&typeof q==='object'&&!Array.isArray(q)?q:{}}catch(e){return {}}}
+  var pending=load();
+  function save(){try{localStorage.setItem(VENDER_DIRECT_QUEUE_KEY,JSON.stringify(pending))}catch(e){}}
+  function flush(key){
+    var x=pending[key];
+    if(!x||!connected||!window.ArgentasSupabaseTransport||typeof window.ArgentasSupabaseTransport.send!=='function')return false;
+    try{x.attempts=Number(x.attempts||0)+1;x.lastAttemptAt=Date.now();
+      window.ArgentasSupabaseTransport.send(JSON.stringify({type:x.type,draft:x.type==='vender-draft'?x.payload:undefined,sale:x.type==='vender-sale'?x.payload:undefined,deliveryId:key}));
+      save();return true
+    }catch(e){x.lastError=String(e&&e.message||e);save();return false}
   }
-}
-function sendVenderDirect(type,payload){
-  if(!payload||!payload.id)return false;
-  var key=type+':'+String(payload.id),entry=venderDirectPending[key]||{attempts:0,queuedAt:Date.now()};
-  entry.type=type;
-  entry.payload=payload;
-  entry.updatedAt=Date.now();
-  venderDirectPending[key]=entry;
-  saveVenderDirectPending();
-  return flushVenderDirect(key)
-}
-function retryVenderDirect(){
-  if(!connected||!window.ArgentasSupabaseTransport)return;
-  Object.keys(venderDirectPending).forEach(function(key){flushVenderDirect(key)})
-}
-setInterval(retryVenderDirect,2000);
+  function send(type,payload){
+    if(!payload||!payload.id)return false;
+    var key=type+':'+String(payload.id),entry=pending[key]||{attempts:0,queuedAt:Date.now()};
+    entry.type=type;entry.payload=payload;entry.updatedAt=Date.now();pending[key]=entry;save();return flush(key)
+  }
+  function retry(){if(!connected||!window.ArgentasSupabaseTransport)return;Object.keys(pending).forEach(function(key){flush(key)})}
+  function ack(deliveryId){if(!deliveryId)return;delete pending[String(deliveryId)];save()}
+  function startRetry(){setInterval(retry,2000)}
+  return Object.freeze({load:load,save:save,flush:flush,send:send,retry:retry,ack:ack,startRetry:startRetry,getPending:function(){return pending}});
+})();
+var venderDirectPending=ArgentasVenderSync.getPending();
+function loadVenderDirectPending(){return ArgentasVenderSync.load()}
+function saveVenderDirectPending(){return ArgentasVenderSync.save()}
+function flushVenderDirect(key){return ArgentasVenderSync.flush(key)}
+function sendVenderDirect(type,payload){return ArgentasVenderSync.send(type,payload)}
+function retryVenderDirect(){return ArgentasVenderSync.retry()}
+ArgentasVenderSync.startRetry();
 window.argentasComandasSendDirect=sendVenderDirect;
 window.argentasComandasCaptureDraft=function(s){return false};
 window.argentasComandasCaptureSale=function(s){try{return registerVenderSale(s)}catch(e){console.warn('No se pudo capturar la venta directamente en Comandas',e);return false}};

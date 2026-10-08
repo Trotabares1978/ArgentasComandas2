@@ -228,7 +228,7 @@
     online.style.marginTop='10px';
     online.innerHTML='<b>🧾 Pizarra de comandas online</b><div class="ac-muted" style="margin-top:8px">Abrí la pizarra desde cualquier teléfono o compartí su dirección por WhatsApp, Messenger u otra aplicación.</div><div class="ac-actions"><button type="button" class="ac-btn ac-primary" id="ac-open-pizarra">🧾 ABRIR PIZARRA</button><button type="button" class="ac-btn ac-dark" id="ac-share-pizarra">📤 COMPARTIR PIZARRA</button></div>';
     section.appendChild(online);
-    var PIZARRA_URL='https://trotabares1978.github.io/ArgentasComandas2/pizarra.html?v=5e874f2';
+    var PIZARRA_URL='https://trotabares1978.github.io/ArgentasComandas2/pizarra.html?v=9e54bf7';
     function openExternalUrl(url){
       if(window.ArgentasAndroid&&typeof window.ArgentasAndroid.openExternalUrl==='function'){
         window.ArgentasAndroid.openExternalUrl(url);

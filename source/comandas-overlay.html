@@ -100,7 +100,34 @@ window.argentasCustomizeProduct=function(product,onAdd){
   return true;
 };
 })();</script><script>(function(){'use strict';
-var KEY='argentas_comandas_v2',db=load(),draft=[],connected=false,syncing=false,pendingPaymentId=null,lastAction=null,cashPromptKey=null;try{var _la=JSON.parse(localStorage.getItem('argentas_last_action')||'null');if(_la&&_la.type&&_la.id)lastAction=_la}catch(e){lastAction=null}
+var KEY='argentas_comandas_v2',db=load(),draft=[],connected=false,syncing=false,pendingPaymentId=null,lastAction=null,cashPromptKey=null;
+function cleanupKnownTestData(){
+  var bad={xq82uyv:1,gijzlft:1},changed=false;
+  try{
+    if(Array.isArray(db.orders)){
+      var before=db.orders.length;
+      db.orders=db.orders.filter(function(o){
+        var id=String(o&&o.id||''),saleId=String(o&&o.venderSaleId||'');
+        return !bad[id]&&!bad[saleId]&&!bad[id.replace(/^v/,'')];
+      });
+      changed=db.orders.length!==before;
+    }
+    var raw=localStorage.getItem('argentas_sales'),sales=raw?JSON.parse(raw):[];
+    if(Array.isArray(sales)){
+      var kept=sales.filter(function(s){
+        var id=String(s&&s.id||''),cid=String(s&&s.comandaId||'');
+        return !bad[id]&&!bad[cid]&&!bad[id.replace(/^v/,'')];
+      });
+      if(kept.length!==sales.length){localStorage.setItem('argentas_sales',JSON.stringify(kept));changed=true}
+    }
+    ['argentas_vender_sale_pending','argentas_vender_draft','argentas_vender_direct_pending_v1'].forEach(function(k){
+      var v=localStorage.getItem(k);
+      if(v&&(/xq82uyv|gijzlft/.test(v))){localStorage.removeItem(k);changed=true}
+    });
+    if(changed){db.updatedAt=Date.now();localStorage.setItem(KEY,JSON.stringify(db))}
+  }catch(e){}
+}
+cleanupKnownTestData();try{var _la=JSON.parse(localStorage.getItem('argentas_last_action')||'null');if(_la&&_la.type&&_la.id)lastAction=_la}catch(e){lastAction=null}
 var syncDiag={lastSend:0,lastReceive:0,lastAck:0,lastConnect:0,lastDisconnect:0,lastError:'',receivedStates:0,sentStates:0,transportDiagnostics:[]};
 function diagSave(){try{localStorage.setItem('argentas_sync_diag',JSON.stringify(syncDiag))}catch(e){}}
 function diagLoad(){try{var x=JSON.parse(localStorage.getItem('argentas_sync_diag')||'null');if(x&&typeof x==='object')Object.assign(syncDiag,x)}catch(e){}}

@@ -230,7 +230,7 @@
     section.appendChild(online);
     var PIZARRA_URL='https://trotabares1978.github.io/ArgentasComandas2/pizarra.html';
     function openExternalUrl(url){
-      var intent='intent://'+url.replace(/^https?:\\/\\//,'')+'#Intent;scheme=https;action=android.intent.action.VIEW;end';
+      var intent='intent://'+url.replace(/^https?:\/\//,'')+'#Intent;scheme=https;action=android.intent.action.VIEW;end';
       try{window.location.href=intent}catch(e){window.open(url,'_blank')}
     }
     function openShareSheet(){

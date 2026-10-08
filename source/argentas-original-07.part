@@ -986,12 +986,41 @@ var ArgentasReliableState=(function(){
 function loadReliableState(){return ArgentasReliableState.load()}
 function persistReliablePending(){return ArgentasReliableState.persistPending()}
 function markReliableSeen(id){return ArgentasReliableState.markSeen(id)}
-function buildStateMessage(){syncRevision++;return{type:'state',role:'caja',sessionId:syncSessionId,sessionStartedAt:syncSessionStartedAt,sentAt:Date.now(),revision:syncRevision,msgId:'s'+Date.now()+'-'+(++reliableSeq),db:db,sales:salesSnapshot(),caja:cajaSnapshot()}}
-function flushReliableState(){if(!connected||!window.ArgentasSupabaseTransport||!reliablePending)return;try{var q=syncQueue.find(function(x){return x.msgId===reliablePending.msgId});if(q){q.attempts++;q.lastSentAt=Date.now();saveSyncQueue()}window.ArgentasSupabaseTransport.send(JSON.stringify(reliablePending));syncDiag.lastSend=Date.now();syncDiag.sentStates++;diagSave();updateDiagnostics()}catch(e){syncDiag.lastError='No se pudo enviar el estado';diagSave();updateDiagnostics()}}
+var ArgentasSyncCore=(function(){
+  'use strict';
+  function buildState(){
+    syncRevision++;
+    return{type:'state',role:'caja',sessionId:syncSessionId,sessionStartedAt:syncSessionStartedAt,sentAt:Date.now(),revision:syncRevision,msgId:'s'+Date.now()+'-'+(++reliableSeq),db:db,sales:salesSnapshot(),caja:cajaSnapshot()}
+  }
+  function flushState(){
+    if(!connected||!window.ArgentasSupabaseTransport||!reliablePending)return;
+    try{
+      var q=syncQueue.find(function(x){return x.msgId===reliablePending.msgId});
+      if(q){q.attempts++;q.lastSentAt=Date.now();saveSyncQueue()}
+      window.ArgentasSupabaseTransport.send(JSON.stringify(reliablePending));
+      syncDiag.lastSend=Date.now();syncDiag.sentStates++;diagSave();updateDiagnostics()
+    }catch(e){
+      syncDiag.lastError='No se pudo enviar el estado';diagSave();updateDiagnostics()
+    }
+  }
+  function syncNow(){
+    if(syncing)return;
+    if(reliablePending&&reliablePending.msgId)ackQueue(reliablePending.msgId);
+    reliablePending=buildState();
+    syncQueue=[];
+    queueSnapshot(reliablePending);
+    persistReliablePending();
+    flushState()
+  }
+  return Object.freeze({buildState:buildState,flushState:flushState,sync:syncNow});
+})();
+/* Compatibilidad temporal: las llamadas existentes conservan su contrato. */
+function buildStateMessage(){return ArgentasSyncCore.buildState()}
+function flushReliableState(){return ArgentasSyncCore.flushState()}
 /* Reconciliación autoritativa: la Pizarra recibe periódicamente la foto completa de la app. */ /* build-sync */
-var authoritativeSyncTimer=setInterval(function(){if(connected&&!syncing)sync()},5000);
-var reliableRetryTimer=setInterval(function(){if(connected&&reliablePending){var q=syncQueue.find(function(x){return x.msgId===reliablePending.msgId}),a=q?Number(q.attempts)||0:0,delay=Math.min(30000,2000*Math.pow(2,Math.min(a,4)));if(!q||!q.lastSentAt||Date.now()-Number(q.lastSentAt)>=delay)flushReliableState()}},1000);
-function sync(){if(syncing)return;if(reliablePending&&reliablePending.msgId)ackQueue(reliablePending.msgId);reliablePending=buildStateMessage();syncQueue=[];queueSnapshot(reliablePending);persistReliablePending();flushReliableState()}
+var authoritativeSyncTimer=setInterval(function(){if(connected&&!syncing)ArgentasSyncCore.sync()},5000);
+var reliableRetryTimer=setInterval(function(){if(connected&&reliablePending){var q=syncQueue.find(function(x){return x.msgId===reliablePending.msgId}),a=q?Number(q.attempts)||0:0,delay=Math.min(30000,2000*Math.pow(2,Math.min(a,4)));if(!q||!q.lastSentAt||Date.now()-Number(q.lastSentAt)>=delay)ArgentasSyncCore.flushState()}},1000);
+function sync(){return ArgentasSyncCore.sync()}
 function sendHello(){if(!connected||!window.ArgentasSupabaseTransport)return;window.ArgentasSupabaseTransport.send(JSON.stringify({type:'hello',app:'Argentas-Comandas',sessionId:syncSessionId,sessionStartedAt:syncSessionStartedAt,ts:Date.now()}))}
 loadReliableState();
 /* Una instantánea pendiente de una sesión anterior nunca puede volver a ser la autoridad. */

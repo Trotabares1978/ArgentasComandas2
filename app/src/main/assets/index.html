@@ -67,7 +67,7 @@ async function supabaseInsert(mensaje){
 function handleSupabaseRecord(row){
   if(!row||row.dispositivo===DEVICE_ROLE)return;
   let m=null;try{m=JSON.parse(row.mensaje)}catch(e){}
-  if(m&&m.type==='state'&&m.db)merge(m.db);
+  if(m&&m.type==='state'&&m.db)merge(m.db);if(m&&m.type==='comanda-status'&&m.id&&m.status){let o=db.orders.find(x=>x.id===String(m.id));if(o){let t=Number(m.updatedAt||m.statusUpdatedAt||0);if(t>=Number(o.updatedAt||0)){o.status=String(m.status);o.updatedAt=t||Date.now();save();render();sync()}}}
   if(m&&m.type==='test'){
     btmsg.textContent='Recibido de '+row.dispositivo+': '+(m.message||'prueba OK');
     toast('Servidor: llegó la prueba del otro Argentas');
@@ -123,7 +123,7 @@ async function sync(){
   if(syncing||!realtimeReady||supabaseSending)return;
   syncing=true;supabaseSending=true;
   try{
-    await supabaseInsert(JSON.stringify({type:'state',db:db,deviceId:DEVICE_ID,at:Date.now()}));
+    await supabaseInsert(JSON.stringify({type:'state',role:'caja',db:db,deviceId:DEVICE_ID,at:Date.now()}));
   }catch(e){
     btmsg.textContent='No se pudo sincronizar: '+e.message;
   }finally{supabaseSending=false;syncing=false}

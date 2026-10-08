@@ -36,8 +36,12 @@ jobs:
             grep -q "blnoenkmshrybsqpsvtx.supabase.co" app/src/main/assets/index.html
             grep -q "ARGENTAS_SUPABASE_TRANSPORT" app/src/main/assets/index.html
             grep -q "ARGENTAS · COMANDAS" app/src/main/assets/index.html
+            grep -q "function setStatus" app/src/main/assets/index.html
+            grep -q "function sendComandaStatus" app/src/main/assets/index.html
+            grep -q "type.*comanda-status" app/src/main/assets/index.html
+            grep -q "statusUpdatedAt" app/src/main/assets/index.html
             ! grep -q "PROBAR NEARBY" app/src/main/assets/index.html
-            echo "OK: original Argentas UI + Supabase transport"
+            echo "OK: original Argentas UI + Supabase transport + comanda status sync"
           fi
 
       - name: Prepare icon

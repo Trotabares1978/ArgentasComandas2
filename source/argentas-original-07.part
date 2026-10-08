@@ -843,36 +843,44 @@ function cancelComanda(id){
 }
 var COMANDA_STATUS_QUEUE_KEY='argentas_comanda_status_pending_v2';
 var comandaStatusPending={};
-function loadComandaStatusPending(){try{var x=JSON.parse(localStorage.getItem(COMANDA_STATUS_QUEUE_KEY)||'{}');if(x&&typeof x==='object'&&!Array.isArray(x))comandaStatusPending=x}catch(e){comandaStatusPending={}}}
-function saveComandaStatusPending(){try{localStorage.setItem(COMANDA_STATUS_QUEUE_KEY,JSON.stringify(comandaStatusPending))}catch(e){}}
-function nextStatusStamp(){var n=Date.now(),last=Number(localStorage.getItem('argentas_status_clock')||0);if(n<=last)n=last+1;try{localStorage.setItem('argentas_status_clock',String(n))}catch(e){}return n}
-function flushComandaStatus(){
-  if(!connected||!window.ArgentasSupabaseTransport||typeof window.ArgentasSupabaseTransport.send!=='function')return;
-  Object.keys(comandaStatusPending).forEach(function(key){
-    var x=comandaStatusPending[key];if(!x)return;
-    try{
-      x.attempts=Number(x.attempts||0)+1;x.lastSentAt=Date.now();
-      window.ArgentasSupabaseTransport.send(JSON.stringify({type:'comanda-status',deliveryId:x.deliveryId,id:x.id,status:x.status,statusUpdatedAt:x.statusUpdatedAt,updatedAt:x.updatedAt,statusDeviceId:x.statusDeviceId||''}));
-      saveComandaStatusPending();
-    }catch(e){}
-  });
-}
-function queueComandaStatus(o){
-  if(!o||!o.id)return;
-  var deviceId='';
-  try{deviceId=window.ArgentasSupabaseTransport&&window.ArgentasSupabaseTransport.getDeviceId?window.ArgentasSupabaseTransport.getDeviceId():''}catch(e){}
-  comandaStatusPending[String(o.id)]={deliveryId:'cs:'+String(o.id)+':'+String(o.statusUpdatedAt),id:String(o.id),status:o.status,statusUpdatedAt:Number(o.statusUpdatedAt)||Date.now(),updatedAt:Number(o.updatedAt)||Date.now(),statusDeviceId:String(deviceId||''),attempts:0,lastSentAt:0};
-  saveComandaStatusPending();flushComandaStatus();
-}
-loadComandaStatusPending();
-setInterval(function(){
-  if(!connected)return;
-  var now=Date.now();
-  Object.keys(comandaStatusPending).forEach(function(key){
-    var x=comandaStatusPending[key],a=Number(x&&x.attempts||0),delay=Math.min(30000,2000*Math.pow(2,Math.min(a,4)));
-    if(x&&(!x.lastSentAt||now-Number(x.lastSentAt)>=delay))flushComandaStatus();
-  });
-},1000);
+var ArgentasComandaStatusSync=(function(){'use strict';
+  function load(){try{var x=JSON.parse(localStorage.getItem(COMANDA_STATUS_QUEUE_KEY)||'{}');if(x&&typeof x==='object'&&!Array.isArray(x))comandaStatusPending=x}catch(e){comandaStatusPending={}}}
+  function save(){try{localStorage.setItem(COMANDA_STATUS_QUEUE_KEY,JSON.stringify(comandaStatusPending))}catch(e){}}
+  function nextStamp(){var n=Date.now(),last=Number(localStorage.getItem('argentas_status_clock')||0);if(n<=last)n=last+1;try{localStorage.setItem('argentas_status_clock',String(n))}catch(e){}return n}
+  function flush(){
+    if(!connected||!window.ArgentasSupabaseTransport||typeof window.ArgentasSupabaseTransport.send!=='function')return;
+    Object.keys(comandaStatusPending).forEach(function(key){
+      var x=comandaStatusPending[key];if(!x)return;
+      try{x.attempts=Number(x.attempts||0)+1;x.lastSentAt=Date.now();
+        window.ArgentasSupabaseTransport.send(JSON.stringify({type:'comanda-status',deliveryId:x.deliveryId,id:x.id,status:x.status,statusUpdatedAt:x.statusUpdatedAt,updatedAt:x.updatedAt,statusDeviceId:x.statusDeviceId||''}));
+        save();
+      }catch(e){}
+    });
+  }
+  function queue(o){
+    if(!o||!o.id)return;
+    var deviceId='';
+    try{deviceId=window.ArgentasSupabaseTransport&&window.ArgentasSupabaseTransport.getDeviceId?window.ArgentasSupabaseTransport.getDeviceId():''}catch(e){}
+    comandaStatusPending[String(o.id)]={deliveryId:'cs:'+String(o.id)+':'+String(o.statusUpdatedAt),id:String(o.id),status:o.status,statusUpdatedAt:Number(o.statusUpdatedAt)||Date.now(),updatedAt:Number(o.updatedAt)||Date.now(),statusDeviceId:String(deviceId||''),attempts:0,lastSentAt:0};
+    save();flush();
+  }
+  function startRetry(){setInterval(function(){
+    if(!connected)return;
+    var now=Date.now();
+    Object.keys(comandaStatusPending).forEach(function(key){
+      var x=comandaStatusPending[key],a=Number(x&&x.attempts||0),delay=Math.min(30000,2000*Math.pow(2,Math.min(a,4)));
+      if(x&&(!x.lastSentAt||now-Number(x.lastSentAt)>=delay))flush();
+    });
+  },1000)}
+  return Object.freeze({load:load,save:save,nextStamp:nextStamp,flush:flush,queue:queue,startRetry:startRetry});
+})();
+function loadComandaStatusPending(){return ArgentasComandaStatusSync.load()}
+function saveComandaStatusPending(){return ArgentasComandaStatusSync.save()}
+function nextStatusStamp(){return ArgentasComandaStatusSync.nextStamp()}
+function flushComandaStatus(){return ArgentasComandaStatusSync.flush()}
+function queueComandaStatus(o){return ArgentasComandaStatusSync.queue(o)}
+ArgentasComandaStatusSync.load();
+ArgentasComandaStatusSync.startRetry();
 function setStatus(id,s){if(s!=='recibido'&&s!=='preparando'&&s!=='entregada'&&s!=='oculta')return;var o=db.orders.find(function(x){return x.id===id});if(!o)return;var before=JSON.parse(JSON.stringify(o)),from=o.status,now=nextStatusStamp();o.status=s;o.statusUpdatedAt=now;o.statusDeviceId='';try{o.statusDeviceId=window.ArgentasSupabaseTransport&&window.ArgentasSupabaseTransport.getDeviceId?window.ArgentasSupabaseTransport.getDeviceId():''}catch(e){}o.updatedAt=now;save();importOrdersToCaja([o]);queueComandaStatus(o);/* El estado directo sale primero; sync() queda como respaldo para el estado completo. */sync();rememberAction({type:s==='oculta'?'hide':'status',id:id,from:from,to:s,snapshot:before,label:'marcar #'+o.number+' como '+label(s)});renderOrders();renderUndo();renderConnectionLed();try{requestAnimationFrame(function(){renderOrders()})}catch(_){setTimeout(function(){renderOrders()},0)}renderAll();try{requestAnimationFrame(function(){renderOrders()})}catch(_){setTimeout(function(){renderOrders()},0)}}
 var paymentReceived=0,paymentTransfer=0,paymentCombined=false,paymentField='cash',checkoutOnly=false,checkoutTotal=0,checkoutResolve=null;function openCashPayment(id,mode,transferAmount){var o=id?db.orders.find(function(x){return x.id===id}):null;if(!o&&!checkoutOnly)return;pendingPaymentId=id||null;paymentReceived=0;paymentTransfer=Number(transferAmount)||0;paymentCombined=mode==='Combinada';paymentField=paymentCombined?'transfer':'cash';var m=document.getElementById('ac-pay-modal'),info=document.getElementById('ac-pay-info'),tot=document.getElementById('ac-pay-total');if(info)info.textContent=checkoutOnly?'Cobro de la venta'+(paymentCombined?' · Pago combinado':''):'Comanda #'+o.number+(paymentCombined?' · Pago combinado':'');var ci=document.getElementById('ac-pay-combined-inputs');if(ci)ci.style.display=paymentCombined?'block':'none';if(tot)tot.textContent=money(o?o.total:checkoutTotal);updateCashPayment();if(m){m.classList.add('open');m.setAttribute('aria-hidden','false')}}function updateCashPayment(){var o=pendingPaymentId?db.orders.find(function(x){return x.id===pendingPaymentId}):null;if(!o&&!checkoutOnly)return;var total=Number(o?o.total:checkoutTotal)||0;var e=document.getElementById('ac-pay-entered'),r=document.getElementById('ac-pay-result');if(e)e.textContent=money(paymentReceived);var tr=document.getElementById('ac-pay-transfer'),ca=document.getElementById('ac-pay-cash');if(tr)tr.textContent=money(paymentTransfer);if(ca)ca.textContent=money(paymentReceived);if(r){var receivedTotal=paymentReceived+paymentTransfer;if(receivedTotal===0){r.textContent='Ingresá el importe recibido';r.style.color='';r.style.background='';}else if(receivedTotal>=total){r.textContent='VUELTO  '+money(receivedTotal-total);r.style.color='#35c46a';r.style.background='#102719';}else{r.textContent='Faltante: '+money(total-receivedTotal)+' · La venta puede cerrarse igual';r.style.color='#E8B84A';r.style.background='';}}}function closeCashPayment(){var m=document.getElementById('ac-pay-modal');if(m){m.classList.remove('open');m.setAttribute('aria-hidden','true')}if(checkoutOnly&&checkoutResolve){var r=checkoutResolve;checkoutResolve=null;r(null)}pendingPaymentId=null;paymentReceived=0;paymentTransfer=0;paymentCombined=false;paymentField='cash';checkoutOnly=false;checkoutTotal=0}function confirmCashPayment(){var o=pendingPaymentId?db.orders.find(function(x){return x.id===pendingPaymentId}):null;if(!o&&!checkoutOnly)return;var total=Number(o?o.total:checkoutTotal)||0;var cash=Number(paymentReceived)||0,transfer=Number(paymentTransfer)||0,received=cash+transfer,shortfall=Math.max(0,total-received),change=Math.max(0,received-total);if(checkoutOnly){var result={efectivo:cash,transferencia:transfer,vuelto:change,faltante:shortfall,total:total};var resolve=checkoutResolve;checkoutResolve=null;closeCashPayment();if(resolve)resolve(result);return}o.paid=true;o.paymentMethod=paymentCombined?'Combinada':'Efectivo';o.efectivo=cash;o.transferencia=transfer;o.vuelto=change;o.faltante=shortfall;o.faltanteBonificado=shortfall>0;o.paidAt=Date.now();o.updatedAt=Date.now();save();importOrdersToCaja([o]);closeCashPayment();renderAll();sync()}function openCombinedPayment(id,transferAmount){openCashPayment(id,'Combinada',transferAmount)}function requestCheckoutPayment(total,mode,transferAmount,initialCash){return new Promise(function(resolve){checkoutOnly=true;checkoutTotal=Number(total)||0;checkoutResolve=resolve;paymentReceived=Number(initialCash)||0;paymentTransfer=Number(transferAmount)||0;paymentCombined=mode==='Combinada';paymentField=paymentCombined?(Number(initialCash)>0?'cash':'transfer'):'cash';var m=document.getElementById('ac-pay-modal');if(!m){checkoutOnly=false;checkoutTotal=0;checkoutResolve=null;resolve(null);return}openCashPayment(null,mode,transferAmount);if(mode==='Combinada'&&Number(initialCash)>0){paymentReceived=Number(initialCash)||0;paymentField='cash';updateCashPayment()}})}window.argentasCheckoutPayment=requestCheckoutPayment;function togglePaid(id){var o=db.orders.find(function(x){return x.id===id});if(!o)return;if(o.paid){o.paid=false;o.paymentMethod=null;o.efectivo=0;o.vuelto=0;o.faltante=0;o.faltanteBonificado=false;o.updatedAt=Date.now();save();importOrdersToCaja([o]);renderAll();sync();return}openCashPayment(id)}
 function renderSales(){document.getElementById('ac-ventas').innerHTML=''}

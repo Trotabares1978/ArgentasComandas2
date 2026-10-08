@@ -841,6 +841,7 @@ var ArgentasComandaStatusSync=(function(){'use strict';
       }catch(e){}
     });
   }
+  function ack(deliveryId){if(!deliveryId)return;delete comandaStatusPending[String(deliveryId)];save();}
   function queue(o){
     if(!o||!o.id)return;
     var deviceId='';
@@ -856,7 +857,7 @@ var ArgentasComandaStatusSync=(function(){'use strict';
       if(x&&(!x.lastSentAt||now-Number(x.lastSentAt)>=delay))flush();
     });
   },1000)}
-  return Object.freeze({load:load,save:save,nextStamp:nextStamp,flush:flush,queue:queue,startRetry:startRetry});
+  return Object.freeze({load:load,save:save,nextStamp:nextStamp,flush:flush,queue:queue,ack:ack,startRetry:startRetry});
 })();
 function loadComandaStatusPending(){return ArgentasComandaStatusSync.load()}
 function saveComandaStatusPending(){return ArgentasComandaStatusSync.save()}
@@ -1090,8 +1091,7 @@ var ArgentasSyncMessageRouter=(function(){'use strict';return Object.freeze({han
     sendVenderAck(m.deliveryId||('vender-cancel-draft:'+String(m.draftId)));
     return
   }else if(m.type==='vender-ack'&&m.deliveryId){
-    delete venderDirectPending[String(m.deliveryId)];
-    saveVenderDirectPending();
+    ArgentasVenderSync.ack(m.deliveryId);
     return  }else if(m.type==='comanda-status'&&m.id&&m.status){
     var remoteOrder=db.orders.find(function(o){return o&&String(o.id)===String(m.id)});
     var incomingTs=Number(m.statusUpdatedAt)||0,localTs=Number(remoteOrder&&remoteOrder.statusUpdatedAt)||0;
@@ -1104,8 +1104,7 @@ var ArgentasSyncMessageRouter=(function(){'use strict';return Object.freeze({han
     if(m.deliveryId&&window.ArgentasSupabaseTransport)try{window.ArgentasSupabaseTransport.send(JSON.stringify({type:'comanda-status-ack',deliveryId:String(m.deliveryId)}))}catch(e){}
     return
   }else if(m.type==='comanda-status-ack'&&m.deliveryId){
-    Object.keys(comandaStatusPending).forEach(function(key){var x=comandaStatusPending[key];if(x&&String(x.deliveryId)===String(m.deliveryId))delete comandaStatusPending[key]});
-    saveComandaStatusPending();
+    ArgentasComandaStatusSync.ack(m.deliveryId);
     return
   }else if(m.type==='reconcile-request'){
     /* La Pizarra nunca decide por sí sola qué existe: pide una foto fresca a la app. */

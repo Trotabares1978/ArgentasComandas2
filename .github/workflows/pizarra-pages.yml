@@ -33,7 +33,7 @@ jobs:
           mkdir -p _site
           cp pizarra.html _site/pizarra.html
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: _site
       - name: Deploy to GitHub Pages

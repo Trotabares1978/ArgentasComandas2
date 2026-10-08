@@ -3,6 +3,8 @@ name: Validate Argentas refactor
 on:
   push:
     branches: [refactor-sync-engine-safe]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read

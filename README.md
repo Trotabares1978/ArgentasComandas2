@@ -1,16 +1,23 @@
-# Argentas
+# Argentas Comandas 2
 
-Versión Android de Argentas que conserva la aplicación original y suma un módulo de Comandas.
+Aplicación Android de Argentas con gestión de comandas, ventas y caja.
 
-- Misma base visual y funcional de Argentas.
-- Comandas para tomar, preparar, cobrar, entregar y anular pedidos.
+## Arquitectura actual
+
 - La misma APK se adapta a celular y tablet Android.
-- Sincronización bidireccional directa entre los dos equipos mediante Wi-Fi Direct + TCP.
-- Ambos equipos ejecutan la misma aplicación y pueden enviar y recibir información.
-- El transporte Wi-Fi Direct/TCP vive en un servicio foreground persistente, separado de la Activity, para que la conexión pueda sobrevivir a la recreación o cierre de la interfaz.
-- Ante una pérdida del enlace, el servicio conserva el último dispositivo conocido y busca automáticamente la reconexión cuando vuelve a estar disponible.
-- La sincronización usa mensajes persistentes, confirmación (ACK), reintentos y deduplicación para evitar perder cambios cuando la conexión se corta.
-- Las comandas recibidas se incorporan a las ventas de la caja diaria una sola vez y, al cobrar, registran efectivo o transferencia.
-- La fuente original se reconstruye automáticamente durante el build desde `source/argentas-original-*.part`.
+- La interfaz y lógica principal se reconstruyen durante el build desde `source/argentas-original-*.part`.
+- La persistencia local utiliza el almacenamiento de la aplicación.
+- La sincronización multidispositivo actual utiliza Supabase como transporte.
+- El protocolo de sincronización incluye mensajes persistentes, ACK, reintentos, deduplicación, versiones, tombstones y reconciliación.
+- Las comandas pueden incorporarse a las ventas de Caja y registrar sus estados de cobro.
+- El puente Android se limita actualmente a las funciones nativas necesarias para abrir URLs externas y compartir texto.
 
-El APK de prueba se genera automáticamente mediante GitHub Actions.
+## Build
+
+GitHub Actions valida los scripts JavaScript embebidos y genera el APK mediante Gradle.
+
+La fuente generada durante el build es deliberada: `app/src/main/assets/index.html` es un artefacto de compilación y la fuente canónica vive en `source/`.
+
+## Nota de mantenimiento
+
+El transporte P2P heredado (Wi-Fi Direct/TCP/Nearby) ya no forma parte de la arquitectura actual y no debe reintroducirse como dependencia o camino paralelo sin una decisión arquitectónica explícita.

@@ -82,7 +82,7 @@ window.argentasCustomizeProduct=function(product,onAdd){
     '<label style="display:flex;align-items:center;gap:12px;padding:13px 4px;font-size:16px;color:#fff"><input id="av-no-lechuga" type="checkbox" style="width:22px;height:22px;accent-color:#E8B84A"> Sin lechuga</label>'+
     '<label style="display:flex;align-items:center;gap:12px;padding:13px 4px;font-size:16px;color:#fff"><input id="av-no-tomate" type="checkbox" style="width:22px;height:22px;accent-color:#E8B84A"> Sin tomate</label>'+
     (hasCheese?'<div style="margin-top:12px;border-top:1px solid #333;padding-top:14px"><div style="font-size:11px;font-weight:900;color:#999;letter-spacing:.12em;margin-bottom:8px">QUESO</div>'+
-      (cheeseRequired?'<label style="display:block;padding:9px 4px;color:#fff"><input type="radio" name="av-cheese" value="none"> Sin queso</label>':'')+
+      (['h1','h2','h3','h4'].indexOf(id)>=0?'<label style="display:block;padding:9px 4px;color:#fff"><input type="radio" name="av-cheese" value="none"> Sin queso</label>':'')+
       '<label style="display:block;padding:9px 4px;color:#fff"><input type="radio" name="av-cheese" value="cheddar"> Cheddar</label>'+
       '<label style="display:block;padding:9px 4px;color:#fff"><input type="radio" name="av-cheese" value="provoleta"> Provoleta</label></div>':'')+
     '<div style="display:flex;gap:10px;margin-top:20px"><button id="av-cancel" style="flex:1;height:48px;border-radius:14px;background:#222;color:#fff;border:1px solid #444;font-weight:900">CANCELAR</button><button id="av-add" style="flex:1;height:48px;border-radius:14px;background:#E8B84A;color:#000;border:0;font-weight:1000">AGREGAR</button></div>'+

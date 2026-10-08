@@ -27,17 +27,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     inner class NativeBridge {
-        // Compatibilidad con el HTML histórico: la sincronización actual no usa
-        // Wi-Fi Direct, Bluetooth ni Nearby; estas operaciones ya no arrancan servicios.
-        @JavascriptInterface fun refresh() {}
-        @JavascriptInterface fun startNearby() {}
-        @JavascriptInterface fun stopNearby() {}
-        @JavascriptInterface fun startServer() {}
-        @JavascriptInterface fun connect(address: String) {}
-        @JavascriptInterface fun acceptIncoming() {}
-        @JavascriptInterface fun rejectIncoming() {}
-        @JavascriptInterface fun send(message: String) {}
-
         @JavascriptInterface
         fun openExternalUrl(url: String) {
             try {

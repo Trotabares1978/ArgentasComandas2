@@ -1062,6 +1062,25 @@ window.onSupabaseMessage=function(raw){raw.trim().split('\n').filter(Boolean).fo
     /* La Pizarra nunca decide por sí sola qué existe: pide una foto fresca a la app. */
     try{
       if(m.requestId&&window.ArgentasSupabaseTransport){
+        var incomingOrders=Array.isArray(m.knownOrders)?m.knownOrders:[];
+        var reconcileChanged=false;
+        incomingOrders.forEach(function(ro){
+          if(!ro||!ro.id)return;
+          var rid=String(ro.id),existing=db.orders.find(function(o){return o&&String(o.id)===rid});
+          if(existing)return;
+          if(ro.status==='oculta'||ro.status==='cancelada')return;
+          var copy=JSON.parse(JSON.stringify(ro));
+          var stamp=Number(copy.statusUpdatedAt||copy.updatedAt||copy.createdAt)||Date.now();
+          copy.statusUpdatedAt=stamp;
+          copy.statusDeviceId=String(copy.statusDeviceId||'');
+          copy.updatedAt=Math.max(Number(copy.updatedAt||0),stamp);
+          copy.reconciledFrom='pizarra';
+          db.orders.unshift(copy);
+          reconcileChanged=true;
+        });
+        if(reconcileChanged){
+          save();importOrdersToCaja(db.orders);refreshComandasUI();renderAll();
+        }
         var fresh=buildStateMessage();
         fresh.reconcileFor=String(m.requestId);
         window.ArgentasSupabaseTransport.send(JSON.stringify(fresh));

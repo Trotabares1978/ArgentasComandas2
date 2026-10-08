@@ -389,27 +389,41 @@ async function createOrder(){if(!draft.length)return;var lines=JSON.parse(JSON.s
 function todayKey(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function nextDailyNumber(day){var nums=db.orders.filter(function(o){return String(o.day||'')===day}).map(function(o){return Number(o.number)||0});return (nums.length?Math.max.apply(null,nums):0)+1}
 function label(s){return{recibido:'Recibido',preparando:'En preparación',entregada:'Entregado'}[s]||'Pendiente'}function orderAlarmAge(o){return o&&o.createdAt?Math.max(0,Date.now()-Number(o.createdAt)):0}
-var comandaAlarmed20={};
-function playComandaAlarm(){
+var comandaAlarmed20={},comandaAlarmed30={};
+function playComandaAlarm(level){
   try{
     var C=window.AudioContext||window.webkitAudioContext;
     if(!C)return;
     var c=new C(),g=c.createGain(),o=c.createOscillator();
-    o.type='sine';o.frequency.value=880;g.gain.setValueAtTime(0.0001,c.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.18,c.currentTime+0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001,c.currentTime+0.28);
-    o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+0.3);
-    setTimeout(function(){try{c.close()}catch(_){}},500);
+    var urgent=level===30;
+    o.type='sine';
+    o.frequency.value=urgent?1046:880;
+    g.gain.setValueAtTime(0.0001,c.currentTime);
+    g.gain.exponentialRampToValueAtTime(urgent?0.24:0.18,c.currentTime+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001,c.currentTime+(urgent?0.18:0.28));
+    o.connect(g);g.connect(c.destination);o.start();
+    if(urgent){
+      o.frequency.setValueAtTime(1046,c.currentTime+0.2);
+      o.start(c.currentTime+0.2);
+      o.stop(c.currentTime+0.42);
+    }else{
+      o.stop(c.currentTime+0.3);
+    }
+    setTimeout(function(){try{c.close()}catch(_){}},700);
   }catch(_){}
 }
 function updateComandaAlarms(){
-  var now=Date.now(),changed=false,orders=Array.isArray(db.orders)?db.orders:[];
+  var changed=false,orders=Array.isArray(db.orders)?db.orders:[];
   orders.forEach(function(o){
     if(!o||o.status==='entregada'||o.status==='oculta'||o.status==='cancelada')return;
     var age=orderAlarmAge(o),key=String(o.id||'');
-    if(age>=20*60*1000&&!comandaAlarmed20[key]){
+    if(age>=30*60*1000&&!comandaAlarmed30[key]){
+      comandaAlarmed30[key]=true;
+      playComandaAlarm(30);
+      changed=true;
+    }else if(age>=20*60*1000&&!comandaAlarmed20[key]){
       comandaAlarmed20[key]=true;
-      playComandaAlarm();
+      playComandaAlarm(20);
       changed=true;
     }
   });

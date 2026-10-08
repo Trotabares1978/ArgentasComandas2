@@ -30,7 +30,7 @@
   #argentas-comandas-panel .ac-grid{grid-template-columns:repeat(5,minmax(0,1fr))}
   #argentas-comandas-panel .ac-list-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
-</style>
+.ac-order-alert{border:2px solid #f0a72b!important;box-shadow:0 0 0 1px rgba(240,167,43,.18),0 8px 28px rgba(240,167,43,.12)}.ac-order-alert-badge{display:inline-block;margin-left:6px;padding:4px 7px;border-radius:99px;background:#5a3b0b;color:#ffd27a;font-size:9px;font-weight:1000;letter-spacing:.04em}</style>
 <button id="argentas-comandas-launcher" type="button">🧾 COMANDAS</button><button id="argentas-comandas-mobile-tab" type="button">🧾 COMANDAS</button><div id="argentas-global-connection" class="disconnected" aria-label="Estado de conexión"><span class="dot">●</span><span class="label">DESCONECTADO</span></div>
 <div id="argentas-comandas-panel"><div class="ac-wrap">
 <div class="ac-head"><div><div class="ac-title">ARGENTAS · COMANDAS <span id="ac-bt-led" class="ac-bt-led" title="Estado de conexión">●</span></div><div class="ac-sub">PEDIDOS RECIBIDOS · CONTENIDO Y ESTADO</div></div><div class="ac-actions"><button class="ac-btn ac-dark" id="ac-undo" disabled>↶ Deshacer</button><button class="ac-btn ac-dark" id="ac-close">✕ Cerrar</button></div></div>
@@ -388,8 +388,37 @@ function validateComandaLines(lines){
 async function createOrder(){if(!draft.length)return;var lines=JSON.parse(JSON.stringify(draft));if(!validateComandaLines(lines))return;var total=Number(sum(lines))||0;if(!window.argentasCheckoutPayment){alert('No está disponible el cobro de cierre.');return}lines.forEach(function(x){x.note=customizationNote(x)});var result=await window.argentasCheckoutPayment(total);if(!result)return;if(Number(result.faltante||0)>0){alert('El pedido todavía no está cobrado completo. Falta '+money(result.faltante)+'.');return}var now=Date.now(),day=todayKey(),n=nextDailyNumber(day),id='o'+now+Math.random().toString(36).slice(2,7),method=(Number(result.transferencia||0)>0&&Number(result.efectivo||0)>0)?'Combinada':(Number(result.transferencia||0)>0?'Transferencia':'Efectivo'),order={id:id,number:n,day:day,lines:lines,total:total,status:'recibido',statusUpdatedAt:now,paid:true,paymentMethod:method,efectivo:Number(result.efectivo)||0,transferencia:Number(result.transferencia)||0,vuelto:Number(result.vuelto)||0,faltante:0,faltanteBonificado:false,paidAt:now,source:'comandas',createdAt:now,updatedAt:now};db.orders.unshift(order);draft=[];save();importOrdersToCaja([order]);rememberAction({type:'create',id:id,label:'crear comanda #'+n});renderNew();renderOrders();renderUndo();sync();}
 function todayKey(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 function nextDailyNumber(day){var nums=db.orders.filter(function(o){return String(o.day||'')===day}).map(function(o){return Number(o.number)||0});return (nums.length?Math.max.apply(null,nums):0)+1}
-function label(s){return{recibido:'Recibido',preparando:'En preparación',entregada:'Entregado'}[s]||'Pendiente'}
-function renderRentabilidad(){return}function renderOrders(){var e=document.getElementById('ac-lista-body');if(!e)return;var visible=(Array.isArray(db.orders)?db.orders:[]).filter(function(o){return o&&o.status!=='cancelada'&&o.status!=='oculta'});if(!visible.length){e.innerHTML='<div class="ac-card">No hay comandas pendientes.</div>';return}e.innerHTML='<div class="ac-list-grid">'+visible.map(function(o){var lines=Array.isArray(o.lines)?o.lines:[],done=o.status==='entregada',next=o.status==='recibido'?'preparando':(o.status==='preparando'?'entregada':'oculta'),nextLabel=label(o.status);return '<div class="ac-card" data-order-card="'+o.id+'" style="margin-bottom:9px;'+(done?'opacity:.9':'')+'"><div class="ac-row"><b style="font-size:18px">#'+o.number+' <span class="ac-badge '+(done?'ok':'')+'">'+label(o.status)+'</span></b><button type="button" class="ac-btn ac-red" data-order-cancel="'+o.id+'" title="Anular comanda" aria-label="Anular comanda">✕</button></div><div style="margin-top:10px;font-weight:1000;font-size:11px;letter-spacing:.08em;color:#E8B84A">INCLUYE</div><div style="margin-top:5px;border-top:1px solid #2c2c2c">'+(lines.length?lines.map(function(x,li){var note=customizationNote(x);return '<div class="ac-row"><span style="font-weight:800">'+x.qty+' × '+x.name+(note?' <span class="ac-muted">('+note+')</span>':'')+'</span></div>'}).join(''):'<div class="ac-muted" style="padding:10px 0">Sin detalle de productos</div>')+'</div><div class="ac-total">'+money(o.total)+'</div><div class="ac-actions"><button type="button" class="ac-btn '+(done?'ac-dark':'ac-primary')+'" data-order-next="'+o.id+'">'+nextLabel+'</button></div></div>'}).join('')+'</div>';e.querySelectorAll('[data-order-next]').forEach(function(button){button.onclick=function(ev){ev.preventDefault();ev.stopPropagation();var id=button.getAttribute('data-order-next'),o=db.orders.find(function(x){return x&&x.id===id});if(!o)return;var next=o.status==='recibido'?'preparando':(o.status==='preparando'?'entregada':'oculta');if(o.status==='entregada')setStatus(id,'oculta');else setStatus(id,next)}});e.querySelectorAll('[data-order-cancel]').forEach(function(button){button.onclick=function(ev){ev.preventDefault();ev.stopPropagation();cancelComanda(button.getAttribute('data-order-cancel'))}});}
+function label(s){return{recibido:'Recibido',preparando:'En preparación',entregada:'Entregado'}[s]||'Pendiente'}function orderAlarmAge(o){return o&&o.createdAt?Math.max(0,Date.now()-Number(o.createdAt)):0}
+var comandaAlarmed20={};
+function playComandaAlarm(){
+  try{
+    var C=window.AudioContext||window.webkitAudioContext;
+    if(!C)return;
+    var c=new C(),g=c.createGain(),o=c.createOscillator();
+    o.type='sine';o.frequency.value=880;g.gain.setValueAtTime(0.0001,c.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.18,c.currentTime+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001,c.currentTime+0.28);
+    o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+0.3);
+    setTimeout(function(){try{c.close()}catch(_){}},500);
+  }catch(_){}
+}
+function updateComandaAlarms(){
+  var now=Date.now(),changed=false,orders=Array.isArray(db.orders)?db.orders:[];
+  orders.forEach(function(o){
+    if(!o||o.status==='entregada'||o.status==='oculta'||o.status==='cancelada')return;
+    var age=orderAlarmAge(o),key=String(o.id||'');
+    if(age>=20*60*1000&&!comandaAlarmed20[key]){
+      comandaAlarmed20[key]=true;
+      playComandaAlarm();
+      changed=true;
+    }
+  });
+  if(changed)renderOrders();
+}
+setInterval(updateComandaAlarms,5000);
+setTimeout(updateComandaAlarms,1000);
+
+function renderRentabilidad(){return}function renderOrders(){var e=document.getElementById('ac-lista-body');if(!e)return;var visible=(Array.isArray(db.orders)?db.orders:[]).filter(function(o){return o&&o.status!=='cancelada'&&o.status!=='oculta'});if(!visible.length){e.innerHTML='<div class="ac-card">No hay comandas pendientes.</div>';return}e.innerHTML='<div class="ac-list-grid">'+visible.map(function(o){var lines=Array.isArray(o.lines)?o.lines:[],done=o.status==='entregada',next=o.status==='recibido'?'preparando':(o.status==='preparando'?'entregada':'oculta'),nextLabel=label(o.status),alarm20=!done&&o.status!=='oculta'&&o.status!=='cancelada'&&orderAlarmAge(o)>=20*60*1000;return '<div class="ac-card '+(alarm20?'ac-order-alert':'')+'" data-order-card="'+o.id+'" style="margin-bottom:9px;'+(done?'opacity:.9':'')+'"><div class="ac-row"><b style="font-size:18px">#'+o.number+' <span class="ac-badge '+(done?'ok':'')+'">'+label(o.status)+'</span>'+(alarm20?'<span class="ac-order-alert-badge">⚠️ +20 MIN</span>':'')+'</b><button type="button" class="ac-btn ac-red" data-order-cancel="'+o.id+'" title="Anular comanda" aria-label="Anular comanda">✕</button></div><div style="margin-top:10px;font-weight:1000;font-size:11px;letter-spacing:.08em;color:#E8B84A">INCLUYE</div><div style="margin-top:5px;border-top:1px solid #2c2c2c">'+(lines.length?lines.map(function(x,li){var note=customizationNote(x);return '<div class="ac-row"><span style="font-weight:800">'+x.qty+' × '+x.name+(note?' <span class="ac-muted">('+note+')</span>':'')+'</span></div>'}).join(''):'<div class="ac-muted" style="padding:10px 0">Sin detalle de productos</div>')+'</div><div class="ac-total">'+money(o.total)+'</div><div class="ac-actions"><button type="button" class="ac-btn '+(done?'ac-dark':'ac-primary')+'" data-order-next="'+o.id+'">'+nextLabel+'</button></div></div>'}).join('')+'</div>';e.querySelectorAll('[data-order-next]').forEach(function(button){button.onclick=function(ev){ev.preventDefault();ev.stopPropagation();var id=button.getAttribute('data-order-next'),o=db.orders.find(function(x){return x&&x.id===id});if(!o)return;var next=o.status==='recibido'?'preparando':(o.status==='preparando'?'entregada':'oculta');if(o.status==='entregada')setStatus(id,'oculta');else setStatus(id,next)}});e.querySelectorAll('[data-order-cancel]').forEach(function(button){button.onclick=function(ev){ev.preventDefault();ev.stopPropagation();cancelComanda(button.getAttribute('data-order-cancel'))}});}
 function cancelComanda(id){
   var o=db.orders.find(function(x){return x&&x.id===id});
   if(!o||o.status==='cancelada'||o.status==='entregada')return;

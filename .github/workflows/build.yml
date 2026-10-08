@@ -40,6 +40,10 @@ jobs:
             grep -q "function sendComandaStatus" app/src/main/assets/index.html
             grep -q "type.*comanda-status" app/src/main/assets/index.html
             grep -q "statusUpdatedAt" app/src/main/assets/index.html
+            grep -q "argentas_comanda_status" app/src/main/assets/index.html
+            grep -q "sendStatus" app/src/main/assets/index.html
+            grep -q "onArgentasStatusMessage" app/src/main/assets/index.html
+            ! grep -q "type:'comanda-status'" app/src/main/assets/index.html
             ! grep -q "PROBAR NEARBY" app/src/main/assets/index.html
             echo "OK: original Argentas UI + Supabase transport + comanda status sync"
           fi

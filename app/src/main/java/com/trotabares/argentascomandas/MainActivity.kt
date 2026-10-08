@@ -1,12 +1,10 @@
 package com.trotabares.argentascomandas
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.net.Uri
@@ -15,14 +13,12 @@ import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import org.json.JSONArray
 import org.json.JSONObject
 
 class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
-    private val permissionRequest = 4107
     private var webViewReady = false
     private var pendingEvents = mutableListOf<String>()
     private var receiver: BroadcastReceiver? = null
@@ -45,68 +41,7 @@ class MainActivity : AppCompatActivity() {
         webView.addJavascriptInterface(NativeBluetoothBridge(), "ArgentasNativeBluetooth")
         setContentView(webView)
 
-        registerServiceReceiver()
-        ContextCompat.startForegroundService(
-            this,
-            Intent(this, ArgentasConnectionService::class.java)
-        )
-
         webView.loadUrl("file:///android_asset/index.html")
-        ensurePermissions()
-    }
-
-    private fun requiredPermissions(): Array<String> {
-        val list = mutableListOf(
-            Manifest.permission.ACCESS_WIFI_STATE,
-            Manifest.permission.CHANGE_WIFI_STATE,
-            Manifest.permission.ACCESS_NETWORK_STATE,
-            Manifest.permission.CHANGE_NETWORK_STATE,
-            Manifest.permission.INTERNET
-        )
-        if (Build.VERSION.SDK_INT >= 33) {
-            list += Manifest.permission.NEARBY_WIFI_DEVICES
-            list += Manifest.permission.ACCESS_FINE_LOCATION
-            list += Manifest.permission.BLUETOOTH_ADVERTISE
-            list += Manifest.permission.BLUETOOTH_CONNECT
-            list += Manifest.permission.BLUETOOTH_SCAN
-            list += Manifest.permission.POST_NOTIFICATIONS
-        } else {
-            list += Manifest.permission.ACCESS_COARSE_LOCATION
-            list += Manifest.permission.ACCESS_FINE_LOCATION
-        }
-        return list.distinct().toTypedArray()
-    }
-
-    private fun hasP2pPermission(): Boolean {
-        return Build.VERSION.SDK_INT < 33 ||
-            ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.NEARBY_WIFI_DEVICES
-            ) == PackageManager.PERMISSION_GRANTED ||
-            ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-    }
-
-    private fun ensurePermissions() {
-        val needed = requiredPermissions().filter {
-            ActivityCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-        }
-        if (needed.isNotEmpty()) {
-            ActivityCompat.requestPermissions(this, needed.toTypedArray(), permissionRequest)
-        } else {
-            startConnectionService()
-        }
-    }
-
-    private fun startConnectionService() {
-        if (!hasP2pPermission()) return
-        ContextCompat.startForegroundService(
-            this,
-            Intent(this, ArgentasConnectionService::class.java)
-        )
-        sendCommand("request_state")
     }
 
     private fun registerServiceReceiver() {

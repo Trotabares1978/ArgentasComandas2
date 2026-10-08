@@ -37,15 +37,15 @@ jobs:
             grep -q "ARGENTAS_SUPABASE_TRANSPORT" app/src/main/assets/index.html
             grep -q "ARGENTAS · COMANDAS" app/src/main/assets/index.html
             grep -q "function setStatus" app/src/main/assets/index.html
-            grep -q "function sendComandaStatus" app/src/main/assets/index.html
-            grep -q "type.*comanda-status" app/src/main/assets/index.html
             grep -q "statusUpdatedAt" app/src/main/assets/index.html
-            grep -q "argentas_comanda_status" app/src/main/assets/index.html
-            grep -q "sendStatus" app/src/main/assets/index.html
-            grep -q "onArgentasStatusMessage" app/src/main/assets/index.html
-            ! grep -q "type:'comanda-status'" app/src/main/assets/index.html
+            grep -q "function sync" app/src/main/assets/index.html
+            ! grep -q "argentas_comanda_status" app/src/main/assets/index.html
+            ! grep -q "sendStatus" app/src/main/assets/index.html
+            ! grep -q "onArgentasStatusMessage" app/src/main/assets/index.html
+            ! grep -q "function sendComandaStatus" app/src/main/assets/index.html
+            ! grep -q "order-update" app/src/main/assets/index.html
             ! grep -q "PROBAR NEARBY" app/src/main/assets/index.html
-            echo "OK: original Argentas UI + Supabase transport + comanda status sync"
+            echo "OK: original Argentas UI + Supabase transport + comanda status via state channel"
           fi
 
       - name: Prepare icon

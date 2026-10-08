@@ -74,5 +74,34 @@ new_html, count = pattern.subn(lambda _m: replacement, html, count=1)
 if count != 1:
     raise SystemExit("No se encontró exactamente el bloque initWhatsappDirecto esperado; se cancela el parche para no tocar la 232.")
 
+native_share_patch = r'''
+<script id="argentas-native-share-patch">
+(function(){
+  try {
+    if (window.ArgentasNativeBluetooth && typeof window.ArgentasNativeBluetooth.shareText === "function") {
+      var nativeShare = function(data){
+        data = data || {};
+        var parts = [];
+        if (data.title) parts.push(String(data.title));
+        if (data.text) parts.push(String(data.text));
+        if (data.url) parts.push(String(data.url));
+        var text = parts.join("\n");
+        window.ArgentasNativeBluetooth.shareText(text);
+        return Promise.resolve();
+      };
+      if (!navigator.share || !navigator.share.__argentasNativeShare) {
+        nativeShare.__argentasNativeShare = true;
+        try { navigator.share = nativeShare; } catch(e) {}
+      }
+    }
+  } catch(e) {}
+})();
+</script>
+'''
+if "</body>" in new_html:
+    new_html = new_html.replace("</body>", native_share_patch + "</body>", 1)
+else:
+    raise SystemExit("No se encontró </body> después del parche WhatsApp.")
+
 p.write_text(new_html, encoding="utf-8")
 print("WhatsApp directo parcheado para el número predefinido.")

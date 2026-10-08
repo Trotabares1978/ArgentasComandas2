@@ -224,6 +224,19 @@ class MainActivity : AppCompatActivity() {
                 // Si no hay navegador disponible, no navegamos el WebView.
             }
         }
+
+        @JavascriptInterface
+        fun shareText(text: String) {
+            try {
+                val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, text)
+                }
+                startActivity(Intent.createChooser(sendIntent, "Compartir Pizarra"))
+            } catch (_: Exception) {
+                // Si no hay aplicación disponible para compartir, no hacemos nada.
+            }
+        }
     }
 
     override fun onRequestPermissionsResult(

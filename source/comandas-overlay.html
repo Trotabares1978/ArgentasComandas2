@@ -440,10 +440,51 @@ if(orders.length>5000)issues.push('historial de comandas muy grande');
 if(products.length>2000)issues.push('catálogo de productos muy grande');
 if(sales.length>10000)issues.push('historial de ventas muy grande');var ids={};orders.forEach(function(x){if(!x||!x.id)issues.push('comanda sin ID');else if(ids[x.id])issues.push('comanda duplicada: '+x.id);else ids[x.id]=true;if(x&&typeof x.total!=='number'&&!Number.isFinite(Number(x.total)))issues.push('total inválido en comanda '+x.id)});products.forEach(function(x){if(!x||!x.id)issues.push('producto sin ID');if(x&&(!Number.isFinite(Number(x.price))||Number(x.price)<0))issues.push('precio inválido en producto '+(x&&x.id||'?'))});sales.forEach(function(x){if(!x||!x.id)issues.push('venta sin ID');if(x&&(!Number.isFinite(Number(x.total))||Number(x.total)<0))issues.push('total inválido en venta '+(x&&x.id||'?'))});var result={at:Date.now(),ok:issues.length===0,issues:issues.slice(0,20),orders:orders.length,products:products.length,sales:sales.length};try{localStorage.setItem(SYNC_HEALTH_KEY,JSON.stringify(result))}catch(e){}return result}
 loadSyncQueue();compactSyncQueue();healthCheck();loadComandaStatus();
-function loadComandaStatus(){try{var p=JSON.parse(localStorage.getItem(COMANDA_STATUS_KEY)||'[]');comandaStatusQueue=Array.isArray(p)?p.filter(function(x){return x&&x.type==='comanda-status'&&x.order&&x.order.id&&x.deliveryId}):[]}catch(e){comandaStatusQueue=[]}}
+function loadComandaStatus(){try{var p=JSON.parse(localStorage.getItem(COMANDA_STATUS_KEY)||'[]');comandaStatusQueue=Array.isArray(p)?p.filter(function(x){return x&&x.event_id&&x.order_id&&x.status}):[]}catch(e){comandaStatusQueue=[]}}
 function persistComandaStatus(){try{if(comandaStatusQueue.length)localStorage.setItem(COMANDA_STATUS_KEY,JSON.stringify(comandaStatusQueue));else localStorage.removeItem(COMANDA_STATUS_KEY)}catch(e){}}
-function sendComandaStatus(order){if(!order||!order.id||!order.status)return;var stamp=Number(order.statusUpdatedAt||order.updatedAt)||Date.now(),msg={type:'comanda-status',deliveryId:'status:'+String(order.id)+':'+stamp,order:{id:String(order.id),status:String(order.status),statusUpdatedAt:stamp,updatedAt:Number(order.updatedAt)||stamp}};comandaStatusQueue=comandaStatusQueue.filter(function(x){return !(x&&x.order&&x.order.id===msg.order.id)});msg.attempts=0;msg.lastSentAt=0;comandaStatusQueue.push(msg);if(comandaStatusQueue.length>100)comandaStatusQueue=comandaStatusQueue.slice(-100);persistComandaStatus();flushComandaStatus();if(connected)sync()}
-function flushComandaStatus(){if(!window.ArgentasSupabaseTransport||!comandaStatusQueue.length)return;var q=comandaStatusQueue[0],a=Number(q.attempts)||0,delay=Math.min(30000,2000*Math.pow(2,Math.min(a,4)));if(q.lastSentAt&&Date.now()-Number(q.lastSentAt)<delay)return;try{q.attempts=a+1;q.lastSentAt=Date.now();persistComandaStatus();window.ArgentasSupabaseTransport.send(JSON.stringify(q));syncDiag.lastSend=Date.now();diagSave()}catch(e){syncDiag.lastError='No se pudo enviar el estado de la comanda';diagSave()}}
+function makeComandaStatusEvent(order){
+  if(!order||!order.id||!order.status)return null;
+  var stamp=Number(order.statusUpdatedAt||order.updatedAt)||Date.now();
+  var device=window.ArgentasSupabaseTransport&&window.ArgentasSupabaseTransport.getDeviceId?String(window.ArgentasSupabaseTransport.getDeviceId()):'local';
+  return {event_id:'cs:'+String(order.id)+':'+String(stamp)+':'+device+':'+Math.random().toString(36).slice(2,8),order_id:String(order.id),status:String(order.status),status_updated_at:stamp,device_id:device};
+}
+function sendComandaStatus(order){
+  var ev=makeComandaStatusEvent(order);if(!ev)return;
+  comandaStatusQueue=comandaStatusQueue.filter(function(x){return String(x.order_id)!==String(ev.order_id)});
+  ev.attempts=0;ev.lastSentAt=0;comandaStatusQueue.push(ev);
+  if(comandaStatusQueue.length>100)comandaStatusQueue=comandaStatusQueue.slice(-100);
+  persistComandaStatus();flushComandaStatus();renderConnectionLed();
+}
+function flushComandaStatus(){
+  if(!window.ArgentasSupabaseTransport||!window.ArgentasSupabaseTransport.sendStatus||!comandaStatusQueue.length)return;
+  var q=comandaStatusQueue[0],a=Number(q.attempts)||0,delay=Math.min(30000,2000*Math.pow(2,Math.min(a,4)));
+  if(q.lastSentAt&&Date.now()-Number(q.lastSentAt)<delay)return;
+  q.attempts=a+1;q.lastSentAt=Date.now();persistComandaStatus();
+  try{
+    Promise.resolve(window.ArgentasSupabaseTransport.sendStatus(q)).then(function(){
+      var i=comandaStatusQueue.findIndex(function(x){return x&&x.event_id===q.event_id});
+      if(i>=0){comandaStatusQueue.splice(i,1);persistComandaStatus();renderConnectionLed();if(comandaStatusQueue.length)flushComandaStatus();}
+    }).catch(function(e){syncDiag.lastError='No se pudo enviar el estado de la comanda';diagSave();renderConnectionLed();});
+    syncDiag.lastSend=Date.now();diagSave();
+  }catch(e){syncDiag.lastError='No se pudo preparar el envío del estado de la comanda';diagSave();}
+}
+function applyRemoteComandaStatus(row){
+  if(!row||!row.order_id||!row.status)return;
+  var remoteStatus={id:String(row.order_id),status:String(row.status),statusUpdatedAt:Number(row.status_updated_at)||0};
+  var localOrder=db.orders.find(function(o){return o&&String(o.id)===remoteStatus.id});
+  var rv=remoteStatus.statusUpdatedAt||0;
+  var lv=Number(localOrder&&localOrder.statusUpdatedAt||localOrder&&localOrder.updatedAt||localOrder&&localOrder.createdAt||0);
+  var take=!localOrder||(rv>lv)||(rv===lv&&remoteStatus.status>String(localOrder.status||''));
+  if(!take)return;
+  if(localOrder){
+    localOrder.status=remoteStatus.status;
+    localOrder.statusUpdatedAt=rv||Date.now();
+    localOrder.updatedAt=Math.max(Number(localOrder.updatedAt||0),localOrder.statusUpdatedAt);
+    save();importOrdersToCaja([localOrder]);
+  }
+  refreshComandasUI();renderConnectionLed();
+}
+window.onArgentasStatusMessage=applyRemoteComandaStatus;
 
 function loadReliableState(){
   try{
@@ -467,7 +508,7 @@ function orderStatusRank(s){return s==='recibido'?0:s==='preparando'?1:s==='entr
 function merge(remote,sales){if(!remote)return;syncing=true;var changed=false;try{if(mergeSales(sales||[]))changed=true;if(mergeCajaSnapshot(remote.caja||{}))changed=true;var om=new Map(db.orders.map(function(x){return[x.id,x]}));(remote.orders||[]).forEach(function(x){var l=om.get(x.id);if(!l){var incoming=Object.assign({},x);if(!Number(incoming.statusUpdatedAt))incoming.statusUpdatedAt=Number(incoming.updatedAt||incoming.createdAt)||Date.now();om.set(x.id,incoming);changed=true;return}var lv=Number(l.updatedAt||l.createdAt||0),rv=Number(x.updatedAt||x.createdAt||0),winner=rv>lv?x:(rv<lv?l:(stableSignature(x)>stableSignature(l)?x:l)),merged=winner===l?Object.assign({},l):Object.assign({},l,winner),lsv=Number(l.statusUpdatedAt||l.updatedAt||l.createdAt||0),rsv=Number(x.statusUpdatedAt||x.updatedAt||x.createdAt||0);if(rsv>lsv||(rsv===lsv&&String(x.status||'')>String(l.status||''))){merged.status=x.status;merged.statusUpdatedAt=rsv;merged.updatedAt=Math.max(Number(merged.updatedAt||0),Number(x.updatedAt||0),rsv)}else if(!Number(merged.statusUpdatedAt)){merged.statusUpdatedAt=lsv}if(stableSignature(merged)!==stableSignature(l)){om.set(x.id,merged);changed=true}});
 var mergedOrders=Array.from(om.values()).sort(function(a,b){return (Number(b.createdAt)||0)-(Number(a.createdAt)||0)});if(JSON.stringify(mergedOrders)!==JSON.stringify(db.orders))changed=true;db.orders=mergedOrders;var pm=new Map(db.products.map(function(x){return[x.id,x]}));(remote.products||[]).forEach(function(x){var l=pm.get(x.id);if(!l||Number(x.updatedAt||0)>Number(l.updatedAt||0)||(Number(x.updatedAt||0)===Number(l.updatedAt||0)&&productSignature(x)>productSignature(l))){pm.set(x.id,x);changed=true}});var mergedProducts=Array.from(pm.values());if(JSON.stringify(mergedProducts)!==JSON.stringify(db.products))changed=true;db.products=mergedProducts;if(mergeProductsIntoArgentas(mergedProducts))changed=true;importOrdersToCaja(db.orders);db.nextOrder=Math.max(db.nextOrder,remote.nextOrder||1,db.orders.reduce(function(m,o){return Math.max(m,o.number+1)},1));if(changed){save();refreshComandasUI();}}finally{syncing=false;if(changed)sync()}}
 function renderConnectionLed(){var s=window.argentasConnectionState||'DESCONECTADO',l=document.getElementById('ac-bt-led'),g=document.getElementById('argentas-global-connection'),pending=!!reliablePending||!!(syncQueue&&syncQueue.length)||!!(comandaStatusQueue&&comandaStatusQueue.length)||!!(window.venderDirectPending&&Object.keys(window.venderDirectPending).length),label=s==='CONECTADO'?(pending?'SINCRONIZANDO':'SINCRONIZADO'):(s==='CONECTANDO'||s==='BUSCANDO'?'RECONEXIÓN':'DESCONECTADO');if(l){l.classList.toggle('on',s==='CONECTADO');l.classList.toggle('off',s!=='CONECTADO');l.classList.toggle('reconnect',s==='CONECTANDO'||s==='BUSCANDO');l.title=label}if(g){g.classList.toggle('connected',s==='CONECTADO');g.classList.toggle('reconnect',s==='CONECTANDO'||s==='BUSCANDO');g.classList.toggle('disconnected',s!=='CONECTADO'&&s!=='CONECTANDO'&&s!=='BUSCANDO');var gl=g.querySelector('.label');if(gl)gl.textContent=label}}
-window.onSupabaseState=function(s,m){window.argentasConnectionState=s||'DESCONECTADO';connected=s==='CONECTADO';if(connected)syncDiag.lastConnect=Date.now();else syncDiag.lastDisconnect=Date.now();diagSave();var msg=document.getElementById('ac-btmsg');if(msg)msg.textContent=m||s;renderConnectionLed();if(connected){loadReliableState();sendHello();retryVenderDirect();if(window.ArgentasSupabaseTransport.recover)window.ArgentasSupabaseTransport.recover();setTimeout(function(){if(connected){flushReliableState();retryVenderDirect();if(window.ArgentasSupabaseTransport.recover)window.ArgentasSupabaseTransport.recover()}},350)}}
+window.onSupabaseState=function(s,m){window.argentasConnectionState=s||'DESCONECTADO';connected=s==='CONECTADO';if(connected)syncDiag.lastConnect=Date.now();else syncDiag.lastDisconnect=Date.now();diagSave();var msg=document.getElementById('ac-btmsg');if(msg)msg.textContent=m||s;renderConnectionLed();if(connected){loadReliableState();sendHello();retryVenderDirect();if(window.ArgentasSupabaseTransport.recover)window.ArgentasSupabaseTransport.recover();if(window.ArgentasSupabaseTransport.recoverStatus)window.ArgentasSupabaseTransport.recoverStatus();setTimeout(function(){if(connected){flushReliableState();retryVenderDirect();if(window.ArgentasSupabaseTransport.recover)window.ArgentasSupabaseTransport.recover();if(window.ArgentasSupabaseTransport.recoverStatus)window.ArgentasSupabaseTransport.recoverStatus();flushComandaStatus()}},350)}}
 function sendVenderAck(deliveryId){
   if(!deliveryId||!window.ArgentasSupabaseTransport)return;
   try{window.ArgentasSupabaseTransport.send(JSON.stringify({type:'vender-ack',deliveryId:String(deliveryId)}))}catch(e){}
@@ -495,9 +536,7 @@ window.onSupabaseMessage=function(raw){raw.trim().split('\n').filter(Boolean).fo
     delete venderDirectPending[String(m.deliveryId)];
     saveVenderDirectPending();
     return
-  }else if(m.type==='comanda-status'&&m.order){var remoteStatus=m.order,localOrder=db.orders.find(function(o){return o&&o.id===remoteStatus.id}),rv=Number(remoteStatus.statusUpdatedAt||remoteStatus.updatedAt||0),lv=Number(localOrder&&localOrder.statusUpdatedAt||localOrder&&localOrder.updatedAt||localOrder&&localOrder.createdAt||0),take=!localOrder||(rv>lv)||(rv===lv&&String(remoteStatus.status||'')>String(localOrder.status||''));if(take){if(localOrder){localOrder.status=String(remoteStatus.status||localOrder.status||'recibido');localOrder.statusUpdatedAt=rv||Date.now();localOrder.updatedAt=Math.max(Number(localOrder.updatedAt||0),Number(remoteStatus.updatedAt||0),localOrder.statusUpdatedAt)}else{var statusNow=rv||Date.now();db.orders.unshift({id:String(remoteStatus.id),status:String(remoteStatus.status||'recibido'),statusUpdatedAt:statusNow,updatedAt:Number(remoteStatus.updatedAt)||statusNow,createdAt:statusNow,number:0,lines:[],total:0})}save();if(localOrder)importOrdersToCaja([localOrder]);refreshComandasUI();markReliableSeen(m.deliveryId||('status:'+String(remoteStatus.id)+':'+String(rv)))}try{window.ArgentasSupabaseTransport.send(JSON.stringify({type:'comanda-status-ack',deliveryId:m.deliveryId||null}))}catch(e){}return
-  }else if(m.type==='comanda-status-ack'&&m.deliveryId){var si=comandaStatusQueue.findIndex(function(x){return x&&x.deliveryId===m.deliveryId});if(si>=0){comandaStatusQueue.splice(si,1);persistComandaStatus();if(comandaStatusQueue.length)flushComandaStatus()}return
-  }else if(m.type==='order-update'&&m.order){var remoteOrder=m.order,localOrderLegacy=db.orders.find(function(o){return o&&o.id===remoteOrder.id}),rvLegacy=Number(remoteOrder.updatedAt||remoteOrder.createdAt||0),lvLegacy=Number(localOrderLegacy&&localOrderLegacy.updatedAt||localOrderLegacy&&localOrderLegacy.createdAt||0),takeLegacy=!localOrderLegacy||(rvLegacy>lvLegacy)||(rvLegacy===lvLegacy&&stableSignature(remoteOrder)>stableSignature(localOrderLegacy));if(takeLegacy){var copyLegacy=JSON.parse(JSON.stringify(remoteOrder)),idxLegacy=db.orders.findIndex(function(o){return o&&o.id===remoteOrder.id});if(idxLegacy>=0)db.orders[idxLegacy]=copyLegacy;else db.orders.unshift(copyLegacy);db.nextOrder=Math.max(db.nextOrder,Number(copyLegacy.number||0)+1);save();importOrdersToCaja([copyLegacy]);refreshComandasUI()}try{window.ArgentasSupabaseTransport.send(JSON.stringify({type:'order-update-ack',msgId:m.msgId||null}))}catch(e){}return
+  }else if(m.type==='order-update'&&m.order){else if(m.type==='order-update'&&m.order){var remoteOrder=m.order,localOrderLegacy=db.orders.find(function(o){return o&&o.id===remoteOrder.id}),rvLegacy=Number(remoteOrder.updatedAt||remoteOrder.createdAt||0),lvLegacy=Number(localOrderLegacy&&localOrderLegacy.updatedAt||localOrderLegacy&&localOrderLegacy.createdAt||0),takeLegacy=!localOrderLegacy||(rvLegacy>lvLegacy)||(rvLegacy===lvLegacy&&stableSignature(remoteOrder)>stableSignature(localOrderLegacy));if(takeLegacy){var copyLegacy=JSON.parse(JSON.stringify(remoteOrder)),idxLegacy=db.orders.findIndex(function(o){return o&&o.id===remoteOrder.id});if(idxLegacy>=0)db.orders[idxLegacy]=copyLegacy;else db.orders.unshift(copyLegacy);db.nextOrder=Math.max(db.nextOrder,Number(copyLegacy.number||0)+1);save();importOrdersToCaja([copyLegacy]);refreshComandasUI()}try{window.ArgentasSupabaseTransport.send(JSON.stringify({type:'order-update-ack',msgId:m.msgId||null}))}catch(e){}return
   }else if(m.type==='order-update-ack'&&m.msgId){return
   }else if(m.type==='state'){
     syncDiag.lastReceive=Date.now();syncDiag.receivedStates++;diagSave();

@@ -37,6 +37,9 @@ jobs:
       - name: Stage 3 - isolate sync reconciliation
         run: python3 scripts/refactor_sync_reconcile.py
 
+      - name: Stage 4 - isolate sync snapshot handling
+        run: python3 scripts/refactor_sync_snapshot.py
+
       - name: Patch WhatsApp Caja
         run: python3 scripts/patch_whatsapp_directo.py
 

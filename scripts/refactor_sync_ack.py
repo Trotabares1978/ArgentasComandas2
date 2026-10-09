@@ -31,7 +31,7 @@ else:
         "}"
         "return Object.freeze({handle:handle})})();\n"
     )
-    html = html.replace(router_anchor, module + router_anchor, 1)
     html = html[:a] + "}else if(m.type==='ack'){ArgentasSyncAck.handle(m)" + html[b:]
+    html = html.replace(router_anchor, module + router_anchor, 1)
     path.write_text(html, encoding="utf-8")
     print("Extracted ACK processing into ArgentasSyncAck; router compatibility and behavior preserved")

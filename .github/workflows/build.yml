@@ -54,7 +54,7 @@ jobs:
           import re, subprocess
           from pathlib import Path
           html=Path("app/src/main/assets/index.html").read_text(encoding="utf-8")
-          scripts=re.findall(r"<script(?:\\s[^>]*)?>(.*?)</script>", html, flags=re.S|re.I)
+          scripts=re.findall(r"<script(?:\s[^>]*)?>(.*?)</script>", html, flags=re.S|re.I)
           for i,script in enumerate(scripts):
               p=Path(f"/tmp/argentas-script-{i}.js")
               p.write_text(script,encoding="utf-8")

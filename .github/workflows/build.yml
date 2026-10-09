@@ -28,6 +28,9 @@ jobs:
       - name: Prepare Argentas
         run: python3 scripts/prepare_argentas.py
 
+      - name: Fix monthly closure summary detection
+        run: python3 scripts/patch_monthly_history.py
+
       - name: Patch WhatsApp Caja
         run: python3 scripts/patch_whatsapp_directo.py
 

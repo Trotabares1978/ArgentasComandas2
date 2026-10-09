@@ -1,3 +1,4 @@
+# Re-trigger build to verify APK artifact publication.
 name: Build Argentas
 
 concurrency:

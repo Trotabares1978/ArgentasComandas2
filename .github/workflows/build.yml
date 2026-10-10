@@ -61,6 +61,9 @@ jobs:
       - name: Prevent self-ACK during status recovery
         run: python3 scripts/fix_status_recovery_self_ack.py
 
+      - name: Prevent self-ACK during state recovery
+        run: python3 scripts/fix_state_recovery_self_ack.py
+
       - name: Patch WhatsApp Caja
         run: python3 scripts/patch_whatsapp_directo.py
 

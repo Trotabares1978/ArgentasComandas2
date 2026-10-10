@@ -34,6 +34,9 @@ jobs:
       - name: Fix monthly closure summary detection
         run: python3 scripts/patch_monthly_history.py
 
+      - name: Refresh Caja UI after remote sync
+        run: python3 scripts/fix_cash_ui_sync.py
+
       - name: Stage 3 - isolate sync reconciliation
         run: python3 scripts/refactor_sync_reconcile.py
 

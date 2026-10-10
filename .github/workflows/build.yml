@@ -55,6 +55,9 @@ jobs:
       - name: ACK duplicate or stale state snapshots
         run: python3 scripts/fix_stale_state_ack.py
 
+      - name: Filter comanda status recovery
+        run: python3 scripts/fix_status_recovery_filter.py
+
       - name: Patch WhatsApp Caja
         run: python3 scripts/patch_whatsapp_directo.py
 

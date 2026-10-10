@@ -34,6 +34,9 @@ jobs:
       - name: Fix monthly closure summary detection
         run: python3 scripts/patch_monthly_history.py
 
+      - name: Refresh Caja UI after remote sync
+        run: python3 scripts/fix_cash_ui_sync.py
+
       - name: Stage 3 - isolate sync reconciliation
         run: python3 scripts/refactor_sync_reconcile.py
 
@@ -43,8 +46,35 @@ jobs:
       - name: Stage 5 - isolate sync ACK handling
         run: python3 scripts/refactor_sync_ack.py
 
+      - name: Fix comanda status ACK queue
+        run: python3 scripts/fix_comanda_status_ack.py
+
+      - name: Fix per-delivery comanda status retries
+        run: python3 scripts/fix_comanda_status_retry.py
+
+      - name: Stage 6 - defer ACK for missing comanda
+        run: python3 scripts/fix_missing_order_ack.py
+
+      - name: ACK duplicate or stale state snapshots
+        run: python3 scripts/fix_stale_state_ack.py
+
+      - name: Filter comanda status recovery
+        run: python3 scripts/fix_status_recovery_filter.py
+
+      - name: Prevent self-ACK during status recovery
+        run: python3 scripts/fix_status_recovery_self_ack.py
+
+      - name: Guard status recovery using payload sender
+        run: python3 scripts/fix_status_recovery_payload_self_ack.py
+
+      - name: Prevent self-ACK during state recovery
+        run: python3 scripts/fix_state_recovery_self_ack.py
+
       - name: Patch WhatsApp Caja
         run: python3 scripts/patch_whatsapp_directo.py
+
+      - name: Regression checks - synchronization recovery
+        run: python3 scripts/test_sync_recovery.py
 
       - name: Prepare icon
         run: |

@@ -12,6 +12,7 @@ checks = {
     "missing fresh snapshot preserves known orders": "Object.keys(previousOrders).forEach(function(id){merge(previousOrders[id])})",
     "stale snapshot warns without blanking the board": "Sin instantánea reciente · conservando las comandas conocidas",
     "sessions deduplicate by highest revision": "x.revision>sessions[sid].revision",
+    "temporarily stale sessions are unioned when another session is fresh": "Uniona sesiones aún válidas aunque su foto tenga entre 30 y 120 s.",
     "orders are unioned across active sessions": "x.m.db.orders.forEach(merge)",
     "repeated fresh snapshots rebuild the board": "m.db.orders.forEach(merge);",
     "status fields survive independent reconciliation": "c.updatedAt=Math.max(Number(c.updatedAt||0),Number(o.updatedAt||0),incomingStatusAt,localStatusAt)",

@@ -37,7 +37,7 @@ jobs:
           import re, subprocess
           from pathlib import Path
           html = Path("pizarra.html").read_text(encoding="utf-8")
-          scripts = re.findall(r"<script(?:\\s[^>]*)?>(.*?)</script>", html, flags=re.S | re.I)
+          scripts = re.findall(r"<script(?:\s[^>]*)?>(.*?)</script>", html, flags=re.S | re.I)
           if not scripts:
               raise SystemExit("No se encontró JavaScript en pizarra.html")
           for i, script in enumerate(scripts):

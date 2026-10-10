@@ -16,6 +16,9 @@ checks = {
     "status recovery selects sender device": "select=mensaje,created_at,device_id",
     "status recovery checks row and payload sender": "String(parsed.statusDeviceId||'')!==DEVICE_ID",
     "state recovery ignores own snapshots": "String(row.device_id||'')===DEVICE_ID",
+    "remote Caja updates refresh React state": 'window.addEventListener("argentas-caja-sync",refreshCaja)',
+    "Caja refresh reads closures from local storage": 'localStorage.getItem("argentas_closures")',
+    "Caja refresh updates closure state": "p(closuresValue)",
 }
 
 missing = [label for label, marker in checks.items() if marker not in html]

@@ -13,7 +13,7 @@ function merge(o){
   /* El contenido general y el estado de la comanda tienen versiones independientes. */
   var localStatus=c.status,localStatusAt=Number(c.statusUpdatedAt||c.updatedAt||c.createdAt||0),localStatusDevice=String(c.statusDeviceId||'');
   var incomingStatusAt=Number(o.statusUpdatedAt||o.updatedAt||o.createdAt||0),incomingStatusDevice=String(o.statusDeviceId||'');
-  var incomingStatusWins=o.status!=null&&(incomingStatusAt>localStatusAt||(incomingStatusAt===localStatusAt&&incomingStatusDevice>localStatusDevice));
+  var incomingStatusWins=o.status!=null&&(localStatus==null||incomingStatusAt>localStatusAt||(incomingStatusAt===localStatusAt&&incomingStatusDevice>localStatusDevice));
   var lu=Number(c.updatedAt||c.createdAt||0),ru=Number(o.updatedAt||o.createdAt||0);
   var winner=ru>lu?o:(ru<lu?c:(JSON.stringify(o)>JSON.stringify(c)?o:c));
   Object.assign(c,winner);
@@ -28,8 +28,7 @@ function apply(raw){
       var sentAt=Number(m.sentAt||0);
       if(!m.sessionId||!sentAt||Date.now()-sentAt>120000)return;
       var sid=String(m.sessionId),rev=Number(m.revision||0),seenKey='pizarra_seen_'+sid,seenRev=Number(sessionStorage.getItem(seenKey)||0);
-      if(rev>0&&rev<=seenRev)return;
-      if(rev>0)sessionStorage.setItem(seenKey,String(rev));
+      if(rev>seenRev)sessionStorage.setItem(seenKey,String(rev));
       m.db.orders.forEach(merge);
     }else if(m.type==='comanda-status'&&m.id&&m.status){
       var c=orders[String(m.id)];

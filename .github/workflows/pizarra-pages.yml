@@ -5,6 +5,13 @@ on:
     branches: [supabase-online]
     paths:
       - "pizarra.html"
+      - "scripts/test_pizarra_sync.py"
+      - ".github/workflows/pizarra-pages.yml"
+  pull_request:
+    branches: [supabase-online]
+    paths:
+      - "pizarra.html"
+      - "scripts/test_pizarra_sync.py"
       - ".github/workflows/pizarra-pages.yml"
   workflow_dispatch:
 
@@ -18,7 +25,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate Pizarra synchronization
+        run: |
+          python3 scripts/test_pizarra_sync.py
+          python3 - <<'PY'
+          import re, subprocess
+          from pathlib import Path
+          html = Path("pizarra.html").read_text(encoding="utf-8")
+          scripts = re.findall(r"<script(?:\\s[^>]*)?>(.*?)</script>", html, flags=re.S | re.I)
+          if not scripts:
+              raise SystemExit("No se encontró JavaScript en pizarra.html")
+          for i, script in enumerate(scripts):
+              path = Path(f"/tmp/pizarra-script-{i}.js")
+              path.write_text(script, encoding="utf-8")
+              subprocess.run(["node", "--check", str(path)], check=True)
+          print(f"Validated {len(scripts)} embedded Pizarra script(s)")
+          PY
+
   deploy:
+    if: github.event_name != 'pull_request'
+    needs: validate
     runs-on: ubuntu-latest
     environment:
       name: argentas-pages

@@ -46,6 +46,9 @@ jobs:
       - name: Fix comanda status ACK queue
         run: python3 scripts/fix_comanda_status_ack.py
 
+      - name: Fix per-delivery comanda status retries
+        run: python3 scripts/fix_comanda_status_retry.py
+
       - name: Stage 6 - defer ACK for missing comanda
         run: python3 scripts/fix_missing_order_ack.py
 

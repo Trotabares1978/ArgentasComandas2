@@ -70,6 +70,9 @@ jobs:
       - name: Patch WhatsApp Caja
         run: python3 scripts/patch_whatsapp_directo.py
 
+      - name: Regression checks - synchronization recovery
+        run: python3 scripts/test_sync_recovery.py
+
       - name: Prepare icon
         run: |
           sudo apt-get update -qq

@@ -7,6 +7,8 @@ checks = {
     "incoming status has independent version comparison": "var incomingStatusWins=o.status!=null&&(localStatus==null||incomingStatusAt>localStatusAt",
     "older snapshot cannot overwrite newer local status": "else{c.status=localStatus;c.statusUpdatedAt=localStatusAt;c.statusDeviceId=localStatusDevice}",
     "only fresh snapshots participate": "var freshCandidates=candidates.filter(function(x){return x.age<=30000})",
+    "state row must contain a recent sentAt": "if(!sentAt||now-sentAt>120000)return",
+    "freshness considers both database time and message time": "age:Math.max(0,now-new Date(row.created_at||0).getTime(),now-sentAt)",
     "missing fresh snapshot preserves known orders": "Object.keys(previousOrders).forEach(function(id){merge(previousOrders[id])})",
     "stale snapshot warns without blanking the board": "Sin instantánea reciente · conservando las comandas conocidas",
     "sessions deduplicate by highest revision": "x.revision>sessions[sid].revision",

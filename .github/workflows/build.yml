@@ -43,6 +43,9 @@ jobs:
       - name: Stage 5 - isolate sync ACK handling
         run: python3 scripts/refactor_sync_ack.py
 
+      - name: Fix comanda status ACK queue
+        run: python3 scripts/fix_comanda_status_ack.py
+
       - name: Patch WhatsApp Caja
         run: python3 scripts/patch_whatsapp_directo.py
 

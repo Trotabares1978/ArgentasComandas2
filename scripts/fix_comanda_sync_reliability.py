@@ -57,12 +57,12 @@ replace_once(
 # 5) The receiver must retain the preparation timestamp sent in a direct status event.
 replace_once(
     "var incomingDevice=String(m.statusDeviceId||''),localDevice=String(remoteOrder&&remoteOrder.statusDeviceId||'');\n    var newer=",
-    "var incomingDevice=String(m.statusDeviceId||''),localDevice=String(remoteOrder&&remoteOrder.statusDeviceId||'');\n    if(!remoteOrder)return; /* No ACK until the full snapshot has restored this comanda. */\n    var newer=",
+    "var incomingDevice=String(m.statusDeviceId||''),localDevice=String(remoteOrder&&remoteOrder.statusDeviceId||'');\n    if(!remoteOrder)return; /* No ACK until the full snapshot has restored this comanda. */\n    var incomingPreparingAt=Number(m.preparingAt)||0;if(m.status==='preparando'&&incomingPreparingAt>0&&!Number(remoteOrder.preparingAt)){remoteOrder.preparingAt=incomingPreparingAt;save();refreshComandasUI()}\n    var newer=",
     "Do not ACK status for unknown comanda",
 )
 replace_once(
     "remoteOrder.status=m.status;remoteOrder.statusUpdatedAt=incomingTs;remoteOrder.statusDeviceId=incomingDevice;remoteOrder.updatedAt=Math.max(Number(remoteOrder.updatedAt||0),Number(m.updatedAt||0),incomingTs);",
-    "remoteOrder.status=m.status;remoteOrder.statusUpdatedAt=incomingTs;remoteOrder.statusDeviceId=incomingDevice;var incomingPreparingAt=Number(m.preparingAt)||0;if(incomingPreparingAt>0)remoteOrder.preparingAt=incomingPreparingAt;remoteOrder.updatedAt=Math.max(Number(remoteOrder.updatedAt||0),Number(m.updatedAt||0),incomingTs);",
+    "remoteOrder.status=m.status;remoteOrder.statusUpdatedAt=incomingTs;remoteOrder.statusDeviceId=incomingDevice;if(incomingPreparingAt>0)remoteOrder.preparingAt=incomingPreparingAt;remoteOrder.updatedAt=Math.max(Number(remoteOrder.updatedAt||0),Number(m.updatedAt||0),incomingTs);",
     "Apply preparation timestamp on status receipt",
 )
 

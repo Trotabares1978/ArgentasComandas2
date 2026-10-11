@@ -61,7 +61,7 @@ jobs:
           required = [
               "snapshots.forEach(function(x){apply(x.row.mensaje,true)})",
               "if(rev>0&&rev<=seenRev&&!forceSnapshot)return;",
-              "merged.preparingAt=Number(local.preparingAt)||Number(remote.preparingAt)||0",
+              "merged.preparingAt=statusWinner===remote&&remotePrep>0?remotePrep:(localPrep||remotePrep||0)",
               "Sin estado actual de la aplicación · se conservan las comandas conocidas",
           ]
           missing=[x for x in required if x not in html]
@@ -74,7 +74,24 @@ jobs:
               p=Path(f"/tmp/pizarra-script-{i}.js")
               p.write_text(script,encoding="utf-8")
               subprocess.run(["node","--check",str(p)],check=True)
-          print(f"Validated {len(scripts)} Pizarra script(s) and {len(required)} mirror/timer guards")
+          merge_match=re.search(r"function merge\\(o\\)\\{[\\s\\S]*?\\n\\}",html)
+          if not merge_match:
+              raise SystemExit("No se encontró la función merge de Pizarra")
+          test_js="""const assert=require('assert'); const orders={};
+          """+merge_match.group(0)+"""
+          merge({id:'test-1',createdAt:10,updatedAt:200,status:'preparando',statusUpdatedAt:200,statusDeviceId:'a',preparingAt:150,lines:[]});
+          merge({id:'test-1',createdAt:10,updatedAt:300,status:'recibido',statusUpdatedAt:100,statusDeviceId:'b',preparingAt:0,lines:[]});
+          assert.strictEqual(orders['test-1'].status,'preparando');
+          assert.strictEqual(Number(orders['test-1'].preparingAt),150);
+          merge({id:'test-1',createdAt:10,updatedAt:400,status:'preparando',statusUpdatedAt:400,statusDeviceId:'c',preparingAt:400,lines:[]});
+          assert.strictEqual(Number(orders['test-1'].preparingAt),400);
+          merge({id:'test-2',createdAt:20,updatedAt:20,status:'recibido',statusUpdatedAt:20,lines:[]});
+          assert.ok(orders['test-1']&&orders['test-2']);
+          """
+          test_path=Path("/tmp/pizarra-merge-regression.js")
+          test_path.write_text(test_js,encoding="utf-8")
+          subprocess.run(["node",str(test_path)],check=True)
+          print(f"Validated {len(scripts)} Pizarra script(s), {len(required)} static guards and merge regression cases")
           PY
 
       - name: Prepare icon

@@ -67,14 +67,14 @@ jobs:
           missing=[x for x in required if x not in html]
           if missing:
               raise SystemExit("Pizarra regression guards failed: "+", ".join(missing))
-          scripts=re.findall(r"<script(?:\\s[^>]*)?>(.*?)</script>",html,flags=re.S|re.I)
+          scripts=re.findall(r"<script(?:\s[^>]*)?>(.*?)</script>",html,flags=re.S|re.I)
           if not scripts:
               raise SystemExit("No se encontró el script de Pizarra")
           for i,script in enumerate(scripts):
               p=Path(f"/tmp/pizarra-script-{i}.js")
               p.write_text(script,encoding="utf-8")
               subprocess.run(["node","--check",str(p)],check=True)
-          merge_match=re.search(r"function merge\\(o\\)\\{[\\s\\S]*?\\n\\}",html)
+          merge_match=re.search(r"function merge\(o\)\{[\s\S]*?\n\}",html)
           if not merge_match:
               raise SystemExit("No se encontró la función merge de Pizarra")
           test_js="""const assert=require('assert'); const orders={};

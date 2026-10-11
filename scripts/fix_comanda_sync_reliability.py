@@ -89,6 +89,7 @@ checks = {
     "status retries are per-key": ">=delay))flush(key);" in html,
     "preparingAt persisted in status queue": "preparingAt:Number(o.preparingAt)||0,attempts:0,lastSentAt:0" in html,
     "unknown status target remains unacked": "if(!remoteOrder)return; /* No ACK until the full snapshot has restored this comanda. */" in html,
+    "preparingAt backfilled from direct event": "if(m.status==='preparando'&&incomingPreparingAt>0&&!Number(remoteOrder.preparingAt))" in html,
     "preparingAt merged on reconciliation": "var knownPreparingAt=Number(l.preparingAt)||Number(x.preparingAt)||0" in html,
     "stale snapshots receive ACK": "if(rev>0&&rev<=lastRemoteRevision){if(m.msgId)" in html,
     "20/30-minute alarms remain": "setInterval(updateComandaAlarms,5000)" in html and "30*60*1000" in html and "20*60*1000" in html,

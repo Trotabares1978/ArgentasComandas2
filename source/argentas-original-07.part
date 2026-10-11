@@ -836,7 +836,7 @@ var ArgentasComandaStatusSync=(function(){'use strict';
     Object.keys(comandaStatusPending).forEach(function(key){
       var x=comandaStatusPending[key];if(!x)return;
       try{x.attempts=Number(x.attempts||0)+1;x.lastSentAt=Date.now();
-        window.ArgentasSupabaseTransport.send(JSON.stringify({type:'comanda-status',deliveryId:x.deliveryId,id:x.id,status:x.status,statusUpdatedAt:x.statusUpdatedAt,updatedAt:x.updatedAt,statusDeviceId:x.statusDeviceId||''}));
+        window.ArgentasSupabaseTransport.send(JSON.stringify({type:'comanda-status',deliveryId:x.deliveryId,id:x.id,status:x.status,statusUpdatedAt:x.statusUpdatedAt,updatedAt:x.updatedAt,statusDeviceId:x.statusDeviceId||'',preparingAt:Number(x.preparingAt)||0}));
         save();
       }catch(e){}
     });

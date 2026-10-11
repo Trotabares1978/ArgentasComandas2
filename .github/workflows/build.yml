@@ -51,6 +51,32 @@ jobs:
             echo "OK: original Argentas UI + Supabase transport + dedicated comanda status queue"
           fi
 
+      - name: Validate Pizarra mirror reconciliation
+        if: github.ref_name == 'supabase-online'
+        run: |
+          python3 - <<'PY'
+          import re, subprocess
+          from pathlib import Path
+          html=Path("pizarra.html").read_text(encoding="utf-8")
+          required = [
+              "snapshots.forEach(function(x){apply(x.row.mensaje,true)})",
+              "if(rev>0&&rev<=seenRev&&!forceSnapshot)return;",
+              "merged.preparingAt=Number(local.preparingAt)||Number(remote.preparingAt)||0",
+              "Sin estado actual de la aplicación · se conservan las comandas conocidas",
+          ]
+          missing=[x for x in required if x not in html]
+          if missing:
+              raise SystemExit("Pizarra regression guards failed: "+", ".join(missing))
+          scripts=re.findall(r"<script(?:\\s[^>]*)?>(.*?)</script>",html,flags=re.S|re.I)
+          if not scripts:
+              raise SystemExit("No se encontró el script de Pizarra")
+          for i,script in enumerate(scripts):
+              p=Path(f"/tmp/pizarra-script-{i}.js")
+              p.write_text(script,encoding="utf-8")
+              subprocess.run(["node","--check",str(p)],check=True)
+          print(f"Validated {len(scripts)} Pizarra script(s) and {len(required)} mirror/timer guards")
+          PY
+
       - name: Prepare icon
         run: |
           sudo apt-get update -qq
@@ -88,6 +114,7 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
 
       - name: Publish latest APK
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

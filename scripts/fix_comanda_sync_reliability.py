@@ -83,6 +83,8 @@ replace_once(
 # Regression guards: fail the build if any critical unsafe path returns.
 checks = {
     "empty draft no longer splices orders": "if(existing){if(!lines.length){var ei=db.orders.indexOf(existing);if(ei>=0)db.orders.splice(ei,1)" not in html,
+    "empty sale payload cannot erase lines": "var saleItems=Array.isArray(s.items)&&s.items.length?s.items:(Array.isArray(existing.lines)?existing.lines:[])" in html and "if(!lines.length)return false;if(JSON.stringify(existing.lines||[])===JSON.stringify(lines)" in html,
+    "reconciliation keeps union by order ID": "var om=new Map((db.orders||[]).map(function(x){return[String(x&&x.id||''),x]}))" in html and "(remote.orders||[]).forEach(function(x){" in html,
     "status ACK matches deliveryId": "String(item.deliveryId||'')===target" in html,
     "status retries are per-key": ">=delay))flush(key);" in html,
     "preparingAt persisted in status queue": "preparingAt:Number(o.preparingAt)||0,attempts:0,lastSentAt:0" in html,

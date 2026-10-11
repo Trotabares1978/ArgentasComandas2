@@ -12,15 +12,17 @@ function merge(o){
   if(!c){orders[id]=JSON.parse(JSON.stringify(o));return}
   var local=JSON.parse(JSON.stringify(c)),remote=JSON.parse(JSON.stringify(o));
   var lu=Number(local.updatedAt||local.createdAt||0),ru=Number(remote.updatedAt||remote.createdAt||0);
-  var merged=Object.assign({},ru>lu?local:local,ru>lu?remote:(ru<lu?local:(JSON.stringify(remote)>JSON.stringify(local)?remote:local)));
+  var winner=ru>lu?remote:(ru<lu?local:(JSON.stringify(remote)>JSON.stringify(local)?remote:local));
+  var merged=Object.assign({},local,winner);
   var ls=Number(local.statusUpdatedAt||local.updatedAt||local.createdAt||0),rs=Number(remote.statusUpdatedAt||remote.updatedAt||remote.createdAt||0);
   var ld=String(local.statusDeviceId||''),rd=String(remote.statusDeviceId||''),statusWinner=rs>ls?remote:(rs<ls?local:(rd>ld?remote:local));
   merged.status=statusWinner.status||merged.status;
   merged.statusUpdatedAt=Math.max(ls,rs);
   merged.statusDeviceId=String(statusWinner.statusDeviceId||'');
   merged.updatedAt=Math.max(Number(local.updatedAt||0),Number(remote.updatedAt||0),merged.statusUpdatedAt);
-  if(merged.status==='preparando'&&!Number(merged.preparingAt)){
-    merged.preparingAt=Number(local.preparingAt)||Number(remote.preparingAt)||0;
+  if(merged.status==='preparando'){
+    var localPrep=Number(local.preparingAt)||0,remotePrep=Number(remote.preparingAt)||0;
+    merged.preparingAt=statusWinner===remote&&remotePrep>0?remotePrep:(localPrep||remotePrep||0);
   }
   orders[id]=merged;
 }

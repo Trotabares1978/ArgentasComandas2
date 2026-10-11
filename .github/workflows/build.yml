@@ -45,7 +45,7 @@ jobs:
 
       - name: Patch WhatsApp Caja
         run: python3 scripts/patch_whatsapp_directo.py
-
+\n      - name: Harden comanda persistence and mirror sync\n        run: python3 scripts/fix_comanda_sync_reliability.py\n
       - name: Prepare icon
         run: |
           sudo apt-get update -qq

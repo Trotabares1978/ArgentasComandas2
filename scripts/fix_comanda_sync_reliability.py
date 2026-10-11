@@ -30,6 +30,18 @@ replace_once(
     "Preserve existing sale lines on empty payload",
 )
 
+# 2b) A known order is enough to ACK a duplicate VENDER event, even if old records lack source metadata.
+replace_once(
+    "var draftId='v'+String(m.draft.id),knownDraft=db.orders.some(function(o){return o&&o.id===draftId&&o.source==='vender'});",
+    "var draftId='v'+String(m.draft.id),knownDraft=db.orders.some(function(o){return o&&o.id===draftId});",
+    "ACK known VENDER draft IDs",
+)
+replace_once(
+    "var saleId='v'+String(m.sale.comandaId||m.sale.id),knownSale=db.orders.some(function(o){return o&&o.id===saleId&&o.source==='vender'});",
+    "var saleId='v'+String(m.sale.comandaId||m.sale.id),knownSale=db.orders.some(function(o){return o&&o.id===saleId});",
+    "ACK known VENDER sale IDs",
+)
+
 # 3) Status queue: ACK by deliveryId, but entries are keyed by order ID.
 replace_once(
     "function ack(deliveryId){if(!deliveryId)return;delete comandaStatusPending[String(deliveryId)];save();}",
@@ -84,6 +96,7 @@ replace_once(
 checks = {
     "empty draft no longer splices orders": "if(existing){if(!lines.length){var ei=db.orders.indexOf(existing);if(ei>=0)db.orders.splice(ei,1)" not in html,
     "empty sale payload cannot erase lines": "var saleItems=Array.isArray(s.items)&&s.items.length?s.items:(Array.isArray(existing.lines)?existing.lines:[])" in html and "if(!lines.length)return false;if(JSON.stringify(existing.lines||[])===JSON.stringify(lines)" in html,
+    "known VENDER IDs are ACKed independent of legacy source metadata": "knownDraft=db.orders.some(function(o){return o&&o.id===draftId})" in html and "knownSale=db.orders.some(function(o){return o&&o.id===saleId})" in html,
     "reconciliation keeps union by order ID": "var om=new Map((db.orders||[]).map(function(x){return[String(x&&x.id||''),x]}))" in html and "(remote.orders||[]).forEach(function(x){" in html,
     "status ACK matches deliveryId": "String(item.deliveryId||'')===target" in html,
     "status retries are per-key": ">=delay))flush(key);" in html,

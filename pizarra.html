@@ -83,18 +83,10 @@ async function refresh(){try{
       candidates.push({row:row,m:m,age:Math.max(0,now-new Date(row.created_at||0).getTime()),started:Number(m.sessionStartedAt||0),revision:Number(m.revision||0),modern:!!m.sessionId});
     }catch(e){}
   });
-  var modern=candidates.filter(function(x){return x.modern}),sessions={},snapshots=[];
-  if(modern.length){
-    modern.forEach(function(x){
-      var sid=String(x.m.sessionId),prior=sessions[sid];
-      if(!prior||new Date(x.row.created_at).getTime()>new Date(prior.row.created_at).getTime())sessions[sid]=x;
-    });
-    snapshots=Object.keys(sessions).map(function(k){return sessions[k]}).filter(function(x){return x.age<=120000}).sort(function(a,b){return new Date(a.row.created_at).getTime()-new Date(b.row.created_at).getTime()});
-  }else{
-    var legacy=candidates.sort(function(a,b){return new Date(b.row.created_at).getTime()-new Date(a.row.created_at).getTime()})[0];
-    if(legacy&&legacy.age<=120000)snapshots=[legacy];
-  }
-  var chosen=snapshots.slice().sort(function(a,b){return new Date(b.row.created_at).getTime()-new Date(a.row.created_at).getTime()})[0]||null,
+  var modern=candidates.filter(function(x){return x.modern}),
+      usable=modern.length?modern:candidates,
+      snapshots=usable.filter(function(x){return x.age<=120000}).sort(function(a,b){return new Date(a.row.created_at).getTime()-new Date(b.row.created_at).getTime()}),
+      chosen=snapshots.length?snapshots[snapshots.length-1]:null,
       latestStateAge=chosen?chosen.age:Infinity;
   activeSessionId=chosen?String(chosen.m.sessionId||''):'';
   activeSessionStartedAt=chosen?Number(chosen.m.sessionStartedAt||0):0;

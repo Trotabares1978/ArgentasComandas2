@@ -10,6 +10,28 @@ html="".join(p.read_text(encoding="utf-8") for p in parts)
 if "</body>" not in html:
     raise SystemExit("Argentas 232 no contiene </body>")
 
+def replace_once(old, new, label):
+    global html
+    count = html.count(old)
+    if count == 0 and new in html:
+        print(label + ": already applied")
+        return
+    if count != 1:
+        raise SystemExit(f"{label}: expected one exact anchor, found {count}; refusing to patch")
+    html = html.replace(old, new, 1)
+    print(label + ": patched")
+
+replace_once(
+    "console.error('Argentas Supabase: rechazo de phx_join:',reason);state('DESCONECTADO','Supabase rechazó la suscripción: '+reason);return",
+    "console.error('Argentas Supabase: rechazo de phx_join:',reason);state('DESCONECTADO','Supabase rechazó la suscripción: '+reason);schedule();try{if(ws)ws.close()}catch(e){}return",
+    "Retry after Supabase join rejection",
+)
+replace_once(
+    "console.error('Argentas Supabase: error del canal:',systemReason);state('DESCONECTADO','Error del canal Supabase: '+systemReason);return",
+    "console.error('Argentas Supabase: error del canal:',systemReason);state('DESCONECTADO','Error del canal Supabase: '+systemReason);schedule();try{if(ws)ws.close()}catch(e){}return",
+    "Retry after Supabase channel error",
+)
+
 def replace_once(old,new,label):
     global html
     count=html.count(old)

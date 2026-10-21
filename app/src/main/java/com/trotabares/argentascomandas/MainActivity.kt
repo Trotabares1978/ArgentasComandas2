@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.appcompat.app.AppCompatActivity
@@ -15,10 +16,23 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
+
         webView = WebView(this)
-        webView.settings.javaScriptEnabled = true
-        webView.settings.domStorageEnabled = true
-        webView.settings.allowFileAccess = true
+        webView.settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            // The app is loaded from android_asset; keep local asset access but
+            // prevent file-origin JavaScript from reading arbitrary local files.
+            allowFileAccess = true
+            allowContentAccess = false
+            allowFileAccessFromFileURLs = false
+            allowUniversalAccessFromFileURLs = false
+            mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+            javaScriptCanOpenWindowsAutomatically = false
+            setSupportMultipleWindows(false)
+            safeBrowsingEnabled = true
+        }
         webView.webViewClient = WebViewClient()
         webView.webChromeClient = WebChromeClient()
         webView.addJavascriptInterface(NativeBridge(), "ArgentasNativeBluetooth")
@@ -29,20 +43,42 @@ class MainActivity : AppCompatActivity() {
     inner class NativeBridge {
         @JavascriptInterface
         fun openExternalUrl(url: String) {
-            try {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-            } catch (_: Exception) {}
+            val uri = try {
+                Uri.parse(url)
+            } catch (_: Exception) {
+                return
+            }
+
+            // Never pass javascript:, file:, content:, intent:, or other
+            // schemes from WebView JavaScript to Android's intent resolver.
+            val scheme = uri.scheme?.lowercase()
+            if ((scheme != "https" && scheme != "http") ||
+                uri.host.isNullOrBlank() ||
+                uri.userInfo != null
+            ) return
+
+            runOnUiThread {
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, uri))
+                } catch (_: Exception) {
+                    // No browser/app can handle this URL.
+                }
+            }
         }
 
         @JavascriptInterface
         fun shareText(text: String) {
-            try {
-                val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, text)
+            runOnUiThread {
+                try {
+                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, text)
+                    }
+                    startActivity(Intent.createChooser(sendIntent, "Compartir Pizarra"))
+                } catch (_: Exception) {
+                    // Sharing is optional and must not crash the app.
                 }
-                startActivity(Intent.createChooser(sendIntent, "Compartir Pizarra"))
-            } catch (_: Exception) {}
+            }
         }
     }
 }

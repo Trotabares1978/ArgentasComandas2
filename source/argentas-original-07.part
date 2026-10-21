@@ -1351,8 +1351,10 @@ function connect(){
 closing=false;if(ws){try{ws.close()}catch(e){}ws=null}joined=false;stopHeartbeat();state('CONECTANDO','Conectando con Supabase…');
 var url=SUPABASE_URL.replace(/^https:/,'wss:')+'/realtime/v1/websocket?apikey='+encodeURIComponent(SUPABASE_KEY)+'&vsn=1.0.0';
 try{ws=new WebSocket(url)}catch(e){state('DESCONECTADO','No se pudo abrir Supabase');schedule();return}
-ws.onopen=function(){ws.send(JSON.stringify({topic:'realtime:argentas-conexion',event:'phx_join',payload:{config:{broadcast:{ack:false,self:false},presence:{enabled:false},postgres_changes:[{event:'INSERT',schema:'public',table:SUPABASE_TABLE}]},user_token:SUPABASE_KEY},ref:'1',join_ref:'1'}))};
+ws.onopen=function(){ws.send(JSON.stringify({topic:'realtime:argentas-conexion',event:'phx_join',payload:{config:{broadcast:{ack:false,self:false},presence:{enabled:false},postgres_changes:[{event:'INSERT',schema:'public',table:SUPABASE_TABLE}]}},ref:'1',join_ref:'1'}))};
 ws.onmessage=function(ev){try{var m=JSON.parse(ev.data);
+if(m.event==='phx_reply'&&m.payload&&m.payload.status==='error'){var reason=String(m.payload.response&&m.payload.response.reason||'Motivo no informado');console.error('Argentas Supabase: rechazo de phx_join:',reason);state('DESCONECTADO','Supabase rechazó la suscripción: '+reason);return}
+if(m.event==='system'&&m.payload&&m.payload.status==='error'){var systemReason=String(m.payload.message||m.payload.reason||'Error del canal en tiempo real');console.error('Argentas Supabase: error del canal:',systemReason);state('DESCONECTADO','Error del canal Supabase: '+systemReason);return}
 if(m.event==='phx_reply'&&m.payload&&m.payload.status==='ok'){joined=true;state('CONECTADO','Conectado a Supabase · '+DEVICE_ROLE);stopHeartbeat();heartbeatTimer=setInterval(function(){if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({topic:'phoenix',event:'heartbeat',payload:{},ref:String(Date.now())}))},25000);recoverRecent();return}
 if(m.event==='system'&&m.payload&&m.payload.status==='ok'){joined=true;state('CONECTADO','Conectado a Supabase · '+DEVICE_ROLE);recoverRecent();return}
 if(m.event==='postgres_changes'&&m.payload&&m.payload.data&&m.payload.data.record){

@@ -1,4 +1,3 @@
-# Re-trigger build to verify APK artifact publication.
 name: Build Argentas
 
 concurrency:
@@ -12,12 +11,11 @@ on:
   pull_request:
     branches: [main]
 
-permissions:
-  contents: write
-
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -79,22 +77,34 @@ jobs:
       - name: Build debug APK
         run: gradle assembleDebug --no-daemon
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: Argentas-debug
           path: app/build/outputs/apk/debug/app-debug.apk
 
+  publish:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Argentas-debug
+          path: dist
+
       - name: Publish latest APK
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          APK="app/build/outputs/apk/debug/app-debug.apk"
+          APK="dist/app-debug.apk"
           if gh release view latest >/dev/null 2>&1; then
             gh release upload latest "$APK" --clobber
             gh release edit latest --title "Argentas — última versión" --notes "Build ${{ github.run_number }} · Commit ${{ github.sha }}"
           else
-            gh release create latest --target "${GITHUB_SHA}" --title "Argentas — última versión" --notes "Build ${{ github.run_number }} · Commit ${{ github.sha }}"
-            gh release upload latest "$APK" --clobber
+            gh release create latest --target "${{ github.sha }}" --title "Argentas — última versión" --notes "Build ${{ github.run_number }} · Commit ${{ github.sha }}"
+            gh release upload latest "$APK"
           fi

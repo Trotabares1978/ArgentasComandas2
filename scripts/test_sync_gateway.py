@@ -55,7 +55,7 @@ checks = {
     "GET returns the next durable cursor": "nextCursor: last ? { after: last.created_at, after_id: last.id } : null" in EDGE,
     "composite cursor index exists": "(created_at asc, id asc)" in SQL,
     "rollback and rollout documented": "Rollback" in GUIDE and "native gateway bridge" in GUIDE and "Android Keystore" in GUIDE,
-    "no production migration claimed": "has NOT been deployed to Supabase production" in GUIDE,
+    "no staging or production deployment claimed": "has NOT been deployed to Supabase staging or production" in GUIDE,
     "Android gateway storage uses Android Keystore": '"AndroidKeyStore"' in SECURE and "KeyGenParameterSpec" in SECURE,
     "Android gateway storage uses AES-GCM authenticated encryption": '"AES/GCM/NoPadding"' in SECURE and "GCMParameterSpec(128, iv)" in SECURE,
     "secure storage persists only encrypted Base64 values": "Base64.encodeToString(packed, Base64.NO_WRAP)" in SECURE and 'putString(name, value)' not in SECURE,

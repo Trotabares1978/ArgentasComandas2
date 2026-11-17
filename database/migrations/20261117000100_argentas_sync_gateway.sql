@@ -22,6 +22,8 @@ create table if not exists public.argentas_sync_messages (
 
 create index if not exists argentas_sync_messages_created_idx
   on public.argentas_sync_messages (created_at desc);
+create index if not exists argentas_sync_messages_created_id_idx
+  on public.argentas_sync_messages (created_at asc, id asc);
 create index if not exists argentas_sync_messages_sender_created_idx
   on public.argentas_sync_messages (sender_device_id, created_at desc);
 

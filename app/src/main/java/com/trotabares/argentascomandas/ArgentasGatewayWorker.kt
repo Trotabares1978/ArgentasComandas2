@@ -197,7 +197,11 @@ class ArgentasGatewayWorker(context: Context, params: WorkerParameters) : Worker
             for (i in 0 until minOf(outgoing.length(), MAX_POSTS_PER_RUN)) {
                 val item = outgoing.optJSONObject(i) ?: continue
                 val deliveryId = item.optString("deliveryId")
-                val payload = item.optJSONObject("payload") ?: continue
+                val payload = item.optJSONObject("payload")
+                if (deliveryId.isBlank() || payload == null) {
+                    ArgentasGatewayQueue.setError(applicationContext, "Hay un mensaje dañado en la cola de envíos; se conservó para diagnóstico")
+                    return Result.failure()
+                }
                 val response = request(
                     "$endpoint",
                     token,

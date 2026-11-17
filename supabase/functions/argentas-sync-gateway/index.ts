@@ -46,6 +46,8 @@ Deno.serve(async (req: Request) => {
   if (!device) return reply(401, { error: "unauthorized" });
 
   if (req.method === "POST") {
+    const contentType = req.headers.get("Content-Type") || "";
+    if (!contentType.toLowerCase().startsWith("application/json")) return reply(415, { error: "unsupported_media_type" });
     const contentLength = req.headers.get("Content-Length");
     if (contentLength && (!/^\d+$/.test(contentLength) || Number(contentLength) > MAX_BODY_BYTES)) {
       return reply(413, { error: "payload_too_large" });

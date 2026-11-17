@@ -51,6 +51,7 @@ checks = {
     "gateway bearer tokens are high-entropy format checked": 'Regex("[A-Za-z0-9_-]{32,256}")' in WORKER,
     "outbox is persisted before scheduling network work": 'writeArray(context, OUTBOX, queue)' in WORKER and 'enqueueUniqueWork(' in WORKER,
     "outbox is idempotent by delivery ID": 'optString("deliveryId") == deliveryId' in WORKER,
+    "WorkManager POST batch is bounded": "const val MAX_POSTS_PER_RUN = 20" in WORKER and "minOf(outgoing.length(), MAX_POSTS_PER_RUN)" in WORKER,
     "inbox page capacity is checked before persistence": "old.length() + additions.size > MAX_QUEUE" in WORKER,
     "inbox is persisted before cursor advances": WORKER.index("addInboxPage(applicationContext, messages)") < WORKER.index("saveCursor(applicationContext, next)"),
     "gateway GET cursor values are URL encoded": 'URLEncoder.encode(cursor.optString("after"), "UTF-8")' in WORKER,

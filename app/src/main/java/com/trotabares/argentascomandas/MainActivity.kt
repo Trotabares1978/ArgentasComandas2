@@ -10,6 +10,7 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
+import android.webkit.WebResourceRequest
 import android.webkit.WebViewClient
 import androidx.appcompat.app.AppCompatActivity
 
@@ -46,7 +47,28 @@ class MainActivity : AppCompatActivity() {
             setSupportMultipleWindows(false)
             safeBrowsingEnabled = true
         }
-        webView.webViewClient = WebViewClient()
+        webView.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                // JavaScript interfaces are available to every frame. Keep navigation
+                // inside the trusted packaged asset origin and never load remote frames.
+                if (!request.isForMainFrame) return true
+                val uri = request.url
+                val scheme = uri.scheme?.lowercase()
+                if (scheme == "file" && uri.host.isNullOrEmpty() &&
+                    uri.path?.startsWith("/android_asset/") == true
+                ) return false
+                if ((scheme == "https" || scheme == "http") &&
+                    !uri.host.isNullOrBlank() && uri.userInfo == null
+                ) {
+                    try {
+                        startActivity(Intent(Intent.ACTION_VIEW, uri))
+                    } catch (_: Exception) {
+                        // No browser/app can handle this URL.
+                    }
+                }
+                return true
+            }
+        }
         webView.webChromeClient = WebChromeClient()
         webView.addJavascriptInterface(NativeBridge(), "ArgentasNativeBluetooth")
         webView.addJavascriptInterface(NativeBridge(), "ArgentasNativeGateway")

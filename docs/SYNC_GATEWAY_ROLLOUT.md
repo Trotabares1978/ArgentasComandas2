@@ -81,3 +81,6 @@ Still required before production: apply the SQL migration and deploy the Edge Fu
 ## Additional production gap
 
 The gateway currently uses durable per-device cursors on the client, but it does not yet send server-side recipient acknowledgements or prune old message rows. This avoids deleting messages that an offline device has not received, but the message table can grow indefinitely. Before production, add recipient-level delivery receipts and a retention policy that only prunes after all active recipients have acknowledged (with a documented expiry policy for devices that remain offline for an extended period). Do not add a simple age-based delete while devices rely on their local cursor; that could silently remove messages from an offline phone.
+
+
+The Android outbox and inbox are also bounded by both message count and total encrypted storage size (4 MiB per queue). Gateway GET pages are limited to 10 messages so a worst-case page remains manageable in memory. If the inbox is full, the cursor does not advance; the app must apply and locally acknowledge queued messages before the worker can continue.

@@ -1,7 +1,7 @@
 # Argentas sync gateway: deployment and device provisioning
 
 ## Status
-This is a staged dual-write path. The native gateway adapter is integrated into the Android build pipeline but remains inactive unless an administrator explicitly configures and enables it in a debug build. The isolated Supabase staging project is active, all three schema migrations are applied, and the Edge Function is deployed with custom bearer-token authentication. No device tokens have been provisioned, so no device can use the gateway yet. Nothing has been deployed to production. The existing Supabase/Pusher transport remains authoritative and available as the fallback until the gateway has passed physical-device and soak testing.
+This is a staged dual-write path. The native gateway adapter is integrated into the Android build pipeline but remains inactive unless an administrator explicitly configures and enables it in a debug build. The isolated Supabase staging project is active, all four schema migrations are applied, and the Edge Function is deployed with custom bearer-token authentication. No device tokens have been provisioned, so no device can use the gateway yet. Nothing has been deployed to production. The existing Supabase/Pusher transport remains authoritative and available as the fallback until the gateway has passed physical-device and soak testing.
 
 ## Security model
 - Each physical device receives an independent cryptographically random bearer token (at least 256 bits).
@@ -16,8 +16,8 @@ This is a staged dual-write path. The native gateway adapter is integrated into 
 - GET accepts only strict ISO-8601 cursor timestamps before building its PostgREST filter, preventing arbitrary filter syntax from entering the query.
 - GET limits delivery to currently active, non-revoked sender devices; revoking a sender stops its queued messages from being delivered to other devices.
 - Responses are not cached.
-- CORS is permissive for WebView compatibility; it is not an authentication control. The bearer token is the actual credential.
-- Per-device rate limiting and abuse throttling are not implemented yet. Safe retention/expiry is also missing; it remains a release blocker.
+- CORS is permissive for WebView compatibility; it is not an authentication control. The bearer token is the actual credential. Supabase security advisor reports the three RLS-enabled gateway tables have no policies; this is intentional because direct client access is denied and only the service-role Edge Function uses them. Do not add broad policies merely to silence this informational finding.
+- Atomic per-device fixed-window throttling is enabled: at most 120 POST operations and 60 GET polls per minute; excess requests receive HTTP 429 with `Retry-After: 60`. The SQL counter update is atomic on the registered device row, so concurrent requests cannot bypass the cap.\n- Automated abuse detection beyond these request ceilings is not implemented. Safe retention/expiry is also missing and remains a release blocker.
 
 ## Verified state of the Android gateway foundation
 - The WebView still loads the canonical app assembled from `source/argentas-original-*.part`; the legacy Supabase/Pusher transport remains unchanged.
@@ -48,7 +48,7 @@ The gateway no longer relies on a timestamp cursor. Every GET asks the database 
 
 After the app persists a complete page in its encrypted local inbox, the existing router applies each message. Only a successful router result is locally acknowledged. The Android bridge first persists the message IDs in a separate encrypted server-ACK queue, then removes them from the local inbox. WorkManager sends those receipt IDs to the gateway; the database inserts one receipt per (message, recipient) idempotently. Only after the server confirms the receipt does the worker remove it from the local ACK queue. This ordering tolerates process death and network retries without silently dropping an ACK.
 
-The pending query is intentionally page-based: it keeps returning the oldest unacknowledged rows until the client applies and ACKs them, then the next page becomes visible. The worker fetches one page per run; the WebView applies it and schedules the next run through the ACK bridge. No automatic server-side message deletion is enabled. Retention and expiry/revocation policy remain a separate production gate.
+The pending query is intentionally page-based: it keeps returning the oldest unacknowledged rows until the client applies and ACKs them, then the next page becomes visible. The worker fetches one page per run; the WebView applies it and schedules the next run through the ACK bridge. No automatic server-side message deletion is enabled. Retention and expiry/revocation policy remain a separate production gate. A simple age-based deletion is unsafe because it could remove messages needed by a device that was offline.
 
 ## Release sequence (required)
 1. JavaScript adapter, staging-only dual-write, router handled-result, and ACK-after-apply behavior are implemented in the build pipeline.
@@ -63,7 +63,7 @@ The pending query is intentionally page-based: it keeps returning the oldest una
 
 ## Applying the migration
 
-The SQL migrations are `supabase/migrations/20261117000100_argentas_sync_gateway.sql`, `supabase/migrations/20261117000200_argentas_sync_recipient_receipts.sql`, and `supabase/migrations/20261117000300_argentas_sync_rpc_search_path.sql`. All three have been applied to the isolated `ARGENTAS-Staging` project only. Do not run them against production during this phase.
+The SQL migrations are `supabase/migrations/20261117000100_argentas_sync_gateway.sql`, `supabase/migrations/20261117000200_argentas_sync_recipient_receipts.sql`, `supabase/migrations/20261117000300_argentas_sync_rpc_search_path.sql`, and `supabase/migrations/20261117000400_argentas_sync_rate_limits.sql`. All four have been applied to the isolated `ARGENTAS-Staging` project only. Do not run them against production during this phase.
 
 ## Provisioning token hashes
 Generate each token on a trusted machine using a cryptographically secure random generator (for example, 32 random bytes encoded as hex). Compute SHA-256 locally and insert only the hash:
@@ -83,7 +83,7 @@ Do not drop the new tables during rollback. Revert Android clients to the legacy
 
 ## Known remaining work
 - Add Android instrumentation tests for queue recovery, encryption failure, and WorkManager retry behavior; static contract tests and CI compilation are in place.
-- The dedicated `ARGENTAS-Staging` project is active, all three schema migrations are applied, and the Edge Function is deployed; no device tokens are provisioned yet.
+- The dedicated `ARGENTAS-Staging` project is active, all four schema migrations are applied, and the Edge Function is deployed; no device tokens are provisioned yet.
 - Add a staging environment and run real gateway integration tests before any production rollout.
 - Replace or repair the nonfunctional Bluetooth controls; do not advertise them as available until native methods exist and two physical devices pass testing.
 - A guided pairing flow is not implemented; current provisioning is an admin-operated staging step.

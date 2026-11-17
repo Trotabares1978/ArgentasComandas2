@@ -1,7 +1,8 @@
 name: Build Argentas
 
 concurrency:
-  group: argentas-build
+  # Keep PR validation isolated from production builds and from other branches.
+  group: argentas-build-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 on:
@@ -32,6 +33,9 @@ jobs:
       - name: Fix monthly closure summary detection
         run: python3 scripts/patch_monthly_history.py
 
+      - name: Refresh Caja UI after remote sync
+        run: python3 scripts/fix_cash_ui_sync.py
+
       - name: Stage 3 - isolate sync reconciliation
         run: python3 scripts/refactor_sync_reconcile.py
 
@@ -46,6 +50,21 @@ jobs:
 
       - name: Harden comanda persistence and mirror sync
         run: python3 scripts/fix_comanda_sync_reliability.py
+
+      - name: Harden VENDER delivery retries and ACK handling
+        run: python3 scripts/fix_vender_delivery_retry.py
+
+      - name: Prevent self-ACK during Supabase history recovery
+        run: python3 scripts/fix_supabase_recovery_origin.py
+
+      - name: Fix comanda status ACK and retry queue
+        run: python3 scripts/fix_comanda_status_queue.py
+
+      - name: Handle asynchronous snapshot delivery failures
+        run: python3 scripts/fix_state_sync_async_errors.py
+
+      - name: Run multi-device synchronization integrity checks
+        run: python3 scripts/test_sync_integrity.py
 
       - name: Prepare icon
         run: |

@@ -21,7 +21,7 @@ android {
             // Install the audit build alongside production without replacing its data.
             applicationIdSuffix = ".audit"
             versionNameSuffix = "-audit"
-            resValue("string", "app_name", "Argentas (Prueba)")
+            resValue("string", "app_name", "Argentas")
         }
     }
 

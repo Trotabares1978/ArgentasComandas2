@@ -15,7 +15,7 @@ if html.count("</body>") != 1:
 
 # Make the existing router report whether it actually applied a message.
 router_start = "handle:function(raw){raw.trim().split('\\n').filter(Boolean).forEach(function(line){try{"
-router_start_new = "handle:function(raw){var handled=true;raw.trim().split('\\\\n').filter(Boolean).forEach(function(line){try{"
+router_start_new = "handle:function(raw){var handled=true;raw.trim().split('\\n').filter(Boolean).forEach(function(line){try{"
 if html.count(router_start) == 1:
     html = html.replace(router_start, router_start_new, 1)
 elif html.count(router_start_new) != 1:

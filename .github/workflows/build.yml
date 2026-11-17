@@ -69,6 +69,9 @@ jobs:
       - name: Run sync gateway contract checks
         run: python3 scripts/test_sync_gateway.py
 
+      - name: Run Android Bluetooth bridge contract checks
+        run: python3 scripts/test_bluetooth_bridge.py
+
       - name: Prepare icon
         run: |
           sudo apt-get update -qq

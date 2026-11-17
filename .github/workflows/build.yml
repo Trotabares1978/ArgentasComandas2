@@ -47,6 +47,9 @@ jobs:
       - name: Harden comanda persistence and mirror sync
         run: python3 scripts/fix_comanda_sync_reliability.py
 
+      - name: Harden VENDER delivery retries and ACK handling
+        run: python3 scripts/fix_vender_delivery_retry.py
+
       - name: Prepare icon
         run: |
           sudo apt-get update -qq

@@ -1,7 +1,7 @@
 # Argentas sync gateway: deployment and device provisioning
 
 ## Status
-This is a staged replacement path. It is deliberately NOT wired into the current Android client and has NOT been deployed to Supabase production. The current `argentas_conexion` transport remains unchanged until the Android client, gateway, and migration can be released together.
+This is a staged dual-write path. The native gateway adapter is integrated into the Android build pipeline but remains inactive unless an administrator explicitly configures and enables it in a debug build. It has NOT been deployed to Supabase staging or production. The existing Supabase/Pusher transport remains authoritative and available as the fallback until the gateway has passed physical-device and soak testing.
 
 ## Security model
 - Each physical device receives an independent cryptographically random bearer token (at least 256 bits).
@@ -27,12 +27,12 @@ This is a staged replacement path. It is deliberately NOT wired into the current
 - While the app is foregrounded, `MainActivity` schedules a non-overlapping gateway poll every 15 seconds. WorkManager also retains a 15-minute periodic fallback while Android allows background execution.
 - The queue rejects overflow instead of dropping messages. Inbox page persistence is all-or-nothing with respect to capacity, so the cursor cannot advance past a partially stored page.
 - Gateway configuration accepts only HTTPS Supabase project hosts and validates the high-entropy device-token format. The token is never returned through the JavaScript bridge.
-- The app-side bridge and worker are not yet connected to the existing `ArgentasSupabaseTransport` message router. No production or staging token is provisioned, and no gateway traffic is being sent.
+- `scripts/integrate_sync_gateway.py` wraps the existing `ArgentasSupabaseTransport.send` for staging-only dual-write and routes inbox messages through `window.onSupabaseMessage`. The router now returns an explicit handled result; local inbox ACK occurs only when it returns true. No staging or production token is provisioned, and no gateway traffic is being sent.
 - The old Bluetooth controls remain nonfunctional in this revision; the new HTTP gateway is a separate staged path.
 
 ## Release sequence (required)
-1. Finish the JavaScript adapter that maps the existing app message router to `ArgentasNativeGateway`, with explicit staging-only enablement and ACK only after successful application.
-2. Add an admin-only native provisioning path for the staging endpoint and per-device token; never put raw tokens in source, logs, screenshots, or chat.
+1. JavaScript adapter, staging-only dual-write, router handled-result, and ACK-after-apply behavior are implemented in the build pipeline.
+2. A debug-only provisioning panel is implemented. Provision one independent token per device in the staging registry; never put raw tokens in source, logs, screenshots, or chat.
 3. Build and inspect the audit APK; confirm the legacy transport still works and that the gateway remains inactive when not configured.
 4. Generate one token per device on a trusted admin workstation. Insert only SHA-256 token hashes into the staging device registry.
 5. Apply the migration to a separate Supabase staging project and deploy the Edge Function there with `verify_jwt=false` and its service-role secret configured in Supabase secrets.
@@ -73,7 +73,7 @@ The Android build now injects a native gateway adapter into the packaged HTML. I
 
 Credential provisioning is intentionally restricted to debug builds. In a debug APK, a small floating “Gateway · staging” panel appears at the lower-right corner; an administrator can enter the Supabase Edge Function endpoint and that device's individual bearer token there. The token field is cleared immediately after the native call; the native layer validates the endpoint/token and stores them encrypted with Android Keystore. The web layer stores only the staging on/off flag, never the credential. Release builds cannot provision credentials through this bridge.
 
-The gateway adapter bounds each serialized snapshot to 240 KB before enqueueing (below the 256 KB server limit) and derives an idempotency key from the snapshot content. Staging is opt-in and does not change the existing Bluetooth transport. Do not enable it until a staging Supabase project has the migration applied and each test device has its own provisioned token.
+The gateway adapter bounds each serialized message to 240 KB before enqueueing (below the 256 KB server limit) and uses the app's delivery/message/request identifiers for idempotent retries. Staging is opt-in and does not change the existing Bluetooth transport. Do not enable it until a staging Supabase project has the migration applied and each test device has its own provisioned token.
 
 Still required before production: apply the SQL migration and deploy the Edge Function to a dedicated staging Supabase project; provision at least two separate device tokens; run physical two-device tests including offline/retry, duplicate delivery, simultaneous edits, queue-full behavior, and app restart; then perform a soak test. No production migration, Edge Function deployment, or production credential provisioning has been performed.
 

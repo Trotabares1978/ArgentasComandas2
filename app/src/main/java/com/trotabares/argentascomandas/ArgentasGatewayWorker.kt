@@ -148,7 +148,6 @@ internal object ArgentasGatewayQueue {
 
     internal fun addInboxPage(context: Context, messages: JSONArray): Boolean = synchronized(lock) {
         val old = readArray(context, INBOX)
-        if (old.length() >= MAX_QUEUE) return false
         val known = HashSet<String>()
         for (i in 0 until old.length()) known.add(old.optJSONObject(i)?.optString("id") ?: "")
         val additions = ArrayList<JSONObject>()

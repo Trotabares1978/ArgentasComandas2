@@ -23,7 +23,7 @@ replace_once(
 )
 replace_once(
     "var qStatus=SUPABASE_URL+'/rest/v1/'+SUPABASE_TABLE+'?select=mensaje,created_at&order=created_at.desc&limit=500';",
-    "var qStatus=SUPABASE_URL+'/rest/v1/'+SUPABASE_TABLE+'?select=mensaje,created_at,device_id&device_id=neq.'+encodeURIComponent(DEVICE_ID)+'&order=created_at.desc&limit=500';",
+    "var qStatus=SUPABASE_URL+'/rest/v1/'+SUPABASE_TABLE+'?select=mensaje,created_at,device_id&or=(device_id.is.null,device_id.neq.'+encodeURIComponent(DEVICE_ID)+')&order=created_at.desc&limit=500';",
     "Exclude own device from status recovery query",
 )
 replace_once(
@@ -39,7 +39,7 @@ replace_once(
 
 checks = {
     "state recovery excludes current device": "device_id=neq.'+encodeURIComponent(DEVICE_ID)+'&mensaje=like.*%22type%22%3A%22state%22*" in html,
-    "status recovery excludes current device": "select=mensaje,created_at,device_id&device_id=neq.'+encodeURIComponent(DEVICE_ID)+'&order=created_at.desc&limit=500" in html,
+    "status recovery excludes current device and retains legacy null sender rows": "select=mensaje,created_at,device_id&or=(device_id.is.null,device_id.neq.'+encodeURIComponent(DEVICE_ID)+')&order=created_at.desc&limit=500" in html,
     "state rows have a client-side sender guard": "if(!row||!row.mensaje||String(row.device_id||'')===DEVICE_ID)return;" in html,
     "status rows have a client-side sender guard": "statusRows.reverse().forEach(function(row){if(!row||!row.mensaje||String(row.device_id||'')===DEVICE_ID)return;" in html,
 }

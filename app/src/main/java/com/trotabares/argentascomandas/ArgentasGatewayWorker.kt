@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 internal object ArgentasGatewayQueue {
     private const val OUTBOX = "outbox_v1"
     private const val INBOX = "inbox_v1"
-    private const val CURSOR = "cursor_v1"
+    private const val SERVER_ACKS = "server_acks_v1"
     private const val MAX_QUEUE = 500
     private const val MAX_QUEUE_BYTES = 4 * 1024 * 1024
     private val lock = Any()
@@ -65,9 +65,19 @@ internal object ArgentasGatewayQueue {
         val ids = try { JSONArray(idsJson) } catch (_: Exception) { return false }
         val acknowledged = HashSet<String>()
         for (i in 0 until ids.length()) {
-            val id = ids.opt(i)?.toString()?.takeIf { it.isNotBlank() } ?: continue
+            val id = ids.opt(i)?.toString()?.takeIf { it.matches(Regex("\\d+")) && it != "0" } ?: continue
             acknowledged.add(id)
         }
+        if (acknowledged.isEmpty()) return true
+        val oldAcks = readArray(context, SERVER_ACKS)
+        val ackSet = HashSet<String>()
+        for (i in 0 until oldAcks.length()) oldAcks.opt(i)?.toString()?.let { ackSet.add(it) }
+        acknowledged.forEach { ackSet.add(it) }
+        val newAcks = JSONArray()
+        ackSet.forEach { newAcks.put(it) }
+        // Persist the remote receipt queue BEFORE removing local inbox rows.
+        // A crash can cause a harmless duplicate, never a lost server ACK.
+        writeArray(context, SERVER_ACKS, newAcks)
         val old = readArray(context, INBOX)
         val kept = JSONArray()
         for (i in 0 until old.length()) {
@@ -128,11 +138,17 @@ internal object ArgentasGatewayQueue {
 
     internal fun endpoint(context: Context) = GatewaySecureStore.get(context, "endpoint")
     internal fun token(context: Context) = GatewaySecureStore.get(context, "device_token")
-    internal fun cursor(context: Context): JSONObject? =
-        GatewaySecureStore.get(context, CURSOR)?.let { JSONObject(it) }
+    internal fun pendingServerAcks(context: Context) = synchronized(lock) { readArray(context, SERVER_ACKS) }
 
-    internal fun saveCursor(context: Context, cursor: JSONObject) =
-        GatewaySecureStore.put(context, CURSOR, cursor.toString())
+    internal fun removeServerAcks(context: Context, ids: Set<String>) = synchronized(lock) {
+        val old = readArray(context, SERVER_ACKS)
+        val kept = JSONArray()
+        for (i in 0 until old.length()) {
+            val id = old.opt(i)?.toString() ?: continue
+            if (!ids.contains(id)) kept.put(id)
+        }
+        writeArray(context, SERVER_ACKS, kept)
+    }
 
     internal fun outbox(context: Context) = synchronized(lock) { readArray(context, OUTBOX) }
 
@@ -215,43 +231,49 @@ class ArgentasGatewayWorker(context: Context, params: WorkerParameters) : Worker
                 }
             }
 
-            // Persist each page in the inbox before advancing its cursor. A crash can
-            // therefore cause duplicates, but never silently skip an unpersisted page.
-            var pagesFetched = 0
-            for (page in 0 until 5) {
-                val cursor = ArgentasGatewayQueue.cursor(applicationContext)
-                val query = buildString {
-                    append("$endpoint?")
-                    // Keep a worst-case page comfortably below the encrypted inbox byte ceiling.
-                    append("limit=10")
-                    if (cursor != null) {
-                        append("&after=").append(URLEncoder.encode(cursor.optString("after"), "UTF-8"))
-                        append("&after_id=").append(URLEncoder.encode(cursor.optString("after_id", "0"), "UTF-8"))
+            // Flush durable server-side receipts before asking for another pending page.
+            // The local inbox ACK is queued before its row is removed, so crashes are safe.
+            val pendingAcks = ArgentasGatewayQueue.pendingServerAcks(applicationContext)
+            if (pendingAcks.length() > 0) {
+                val batch = JSONArray()
+                val ids = HashSet<String>()
+                for (i in 0 until minOf(pendingAcks.length(), 100)) {
+                    val id = pendingAcks.opt(i)?.toString() ?: continue
+                    val numeric = id.toLongOrNull() ?: continue
+                    batch.put(numeric)
+                    ids.add(id)
+                }
+                if (batch.length() > 0) {
+                    val ackResponse = request(
+                        endpoint, token, "POST",
+                        JSONObject().put("action", "ack").put("messageIds", batch).toString()
+                    )
+                    if (ackResponse.code != 200) {
+                        ArgentasGatewayQueue.setError(applicationContext, "ACK HTTP ${ackResponse.code}")
+                        return if (ackResponse.code == 429 || ackResponse.code >= 500) Result.retry() else Result.failure()
                     }
+                    ArgentasGatewayQueue.removeServerAcks(applicationContext, ids)
                 }
-                val response = request(query, token, "GET", null)
-                if (response.code != 200) {
-                    ArgentasGatewayQueue.setError(applicationContext, "GET HTTP ${response.code}")
-                    return if (response.code == 429 || response.code >= 500) Result.retry() else Result.failure()
-                }
-                val body = JSONObject(response.body)
-                val messages = body.optJSONArray("messages") ?: JSONArray()
-                if (messages.length() == 0) break
-                pagesFetched++
-                if (!ArgentasGatewayQueue.addInboxPage(applicationContext, messages)) {
-                    ArgentasGatewayQueue.setError(applicationContext, "La bandeja de entrada está llena; se detuvo la descarga")
-                    return Result.success()
-                }
-                val next = body.optJSONObject("nextCursor") ?: break
-                val previous = cursor?.toString()
-                ArgentasGatewayQueue.saveCursor(applicationContext, next)
-                if (previous == next.toString()) break
-        }
+            }
+
+            // The server returns the oldest unacknowledged page. No timestamp cursor
+            // is used: late commits remain visible until this device ACKs them.
+            val response = request("$endpoint?limit=10", token, "GET", null)
+            if (response.code != 200) {
+                ArgentasGatewayQueue.setError(applicationContext, "GET HTTP ${response.code}")
+                return if (response.code == 429 || response.code >= 500) Result.retry() else Result.failure()
+            }
+            val body = JSONObject(response.body)
+            val messages = body.optJSONArray("messages") ?: JSONArray()
+            if (messages.length() > 0 && !ArgentasGatewayQueue.addInboxPage(applicationContext, messages)) {
+                ArgentasGatewayQueue.setError(applicationContext, "La bandeja de entrada está llena; se detuvo la descarga")
+                return Result.success()
+            }
             ArgentasGatewayQueue.markSuccess(applicationContext)
             // A bounded run must chain another worker when backlog remains.
             // Otherwise >15 pending sends or >50 received messages wait until the
             // next periodic poll, which can be a long delay in foreground use.
-            if (outgoing.length() > MAX_POSTS_PER_RUN || pagesFetched == 5) {
+            if (outgoing.length() > MAX_POSTS_PER_RUN) {
                 ArgentasGatewayQueue.scheduleContinuation(applicationContext)
             }
             Result.success()

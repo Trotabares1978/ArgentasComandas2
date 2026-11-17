@@ -19,7 +19,10 @@ checks = {
     "gateway rejects revoked devices": '.is("revoked_at", null)' in EDGE,
     "duplicate delivery returns success": 'error?.code === "23505"' in EDGE,
     "sender cannot read own messages": '.neq("sender_device_id", device.device_id)' in EDGE,
-    "payload size is bounded": "256_000" in EDGE,
+    "payload size is bounded in UTF-8 bytes before JSON parsing": 'new TextEncoder().encode(rawBody).byteLength > 256_000' in EDGE,
+    "GET uses a composite timestamp/id cursor": "after_id" in EDGE and ".or(`created_at.gt." in EDGE,
+    "GET has deterministic tie-breaking order": '.order("created_at", { ascending: true })' in EDGE and '.order("id", { ascending: true })' in EDGE,
+    "GET returns the next durable cursor": "nextCursor: last ? { after: last.created_at, after_id: last.id } : null" in EDGE,
     "rollback and rollout documented": "Rollback" in GUIDE and "Android client integration" in GUIDE,
     "no production migration claimed": "has NOT been deployed to Supabase production" in GUIDE,
 }

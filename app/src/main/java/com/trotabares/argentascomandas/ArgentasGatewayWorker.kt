@@ -102,6 +102,19 @@ internal object ArgentasGatewayQueue {
         )
     }
 
+    internal fun scheduleContinuation(context: Context) {
+        val request = OneTimeWorkRequestBuilder<ArgentasGatewayWorker>()
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
+            .build()
+        // Append behind the current worker instead of KEEP-dropping the continuation.
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            "argentas-gateway-sync-now",
+            ExistingWorkPolicy.APPEND_OR_REPLACE,
+            request
+        )
+    }
+
     fun schedulePeriodic(context: Context) {
         val request = PeriodicWorkRequestBuilder<ArgentasGatewayWorker>(15, TimeUnit.MINUTES)
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
@@ -201,6 +214,7 @@ class ArgentasGatewayWorker(context: Context, params: WorkerParameters) : Worker
 
             // Persist each page in the inbox before advancing its cursor. A crash can
             // therefore cause duplicates, but never silently skip an unpersisted page.
+            var pagesFetched = 0
             for (page in 0 until 5) {
                 val cursor = ArgentasGatewayQueue.cursor(applicationContext)
                 val query = buildString {
@@ -220,6 +234,7 @@ class ArgentasGatewayWorker(context: Context, params: WorkerParameters) : Worker
                 val body = JSONObject(response.body)
                 val messages = body.optJSONArray("messages") ?: JSONArray()
                 if (messages.length() == 0) break
+                pagesFetched++
                 if (!ArgentasGatewayQueue.addInboxPage(applicationContext, messages)) {
                     ArgentasGatewayQueue.setError(applicationContext, "La bandeja de entrada está llena; se detuvo la descarga")
                     return Result.success()
@@ -230,6 +245,12 @@ class ArgentasGatewayWorker(context: Context, params: WorkerParameters) : Worker
                 if (previous == next.toString()) break
         }
             ArgentasGatewayQueue.markSuccess(applicationContext)
+            // A bounded run must chain another worker when backlog remains.
+            // Otherwise >15 pending sends or >50 received messages wait until the
+            // next periodic poll, which can be a long delay in foreground use.
+            if (outgoing.length() > MAX_POSTS_PER_RUN || pagesFetched == 5) {
+                ArgentasGatewayQueue.scheduleContinuation(applicationContext)
+            }
             Result.success()
         } catch (_: IllegalStateException) {
             // Keystore invalidation or authenticated-storage corruption requires

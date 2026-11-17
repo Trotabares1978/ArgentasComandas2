@@ -11,6 +11,7 @@ This is a staged replacement path. It is deliberately NOT wired into the current
 - Public/anonymous roles have no grants on the new tables.
 - `(sender_device_id, delivery_id)` is unique. Retrying the same delivery is acknowledged as a duplicate without creating another row.
 - A device can only read messages sent by other registered devices. The endpoint currently treats all active devices in this single Argentas project as one trusted installation group.
+- GET pagination uses a composite `(created_at, id)` cursor (`after` + `after_id`) so messages sharing the same timestamp are not skipped between pages. The response returns `nextCursor`; clients must persist both fields atomically.
 
 ## Release sequence (required)
 1. Build and test the Android transport adapter against a separate Supabase staging project.
@@ -40,7 +41,8 @@ where device_id = '<device-id>';
 Do not drop the new tables during rollback. Revert Android clients to the legacy transport, disable the Edge Function, and leave the new schema/data intact for diagnosis. Do not alter or purge `argentas_conexion` during the rollout.
 
 ## Known remaining work
-- Android client integration and Android Keystore token enrollment are not implemented in this branch yet.
+- The Android Bluetooth RFCOMM bridge is implemented in this branch, but it still requires physical two-device verification.
+- The secure gateway HTTP client, Android Keystore token enrollment, and durable gateway cursor integration are not implemented in this branch yet.
 - A guided pairing flow is not implemented; current provisioning is an admin-operated staging step.
 - The legacy Pusher/Realtime channel and its broad policies remain active until rollout completion.
 - No production migration or Edge Function deployment has been performed.

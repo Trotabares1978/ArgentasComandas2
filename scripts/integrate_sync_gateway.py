@@ -63,9 +63,13 @@ adapter = r"""
     try{
       json=JSON.stringify(payload);
       if(new TextEncoder().encode(json).length>240000)return false;
-      var hash=2166136261;
-      for(var i=0;i<json.length;i++){hash^=json.charCodeAt(i);hash=Math.imul(hash,16777619)}
-      var deliveryId="state:"+stamp+":"+(hash>>>0).toString(16);
+      var hashA=2166136261,hashB=2246822519;
+      for(var i=0;i<json.length;i++){
+        var code=json.charCodeAt(i);
+        hashA=Math.imul(hashA^code,16777619);
+        hashB=Math.imul(hashB^code,3266489917);
+      }
+      var deliveryId="state:"+stamp+":"+(hashA>>>0).toString(16)+(hashB>>>0).toString(16);
       var accepted=native.enqueueGatewayMessage(deliveryId,json)===true;
       if(accepted&&typeof native.syncGatewayNow==="function")native.syncGatewayNow();
       return accepted;
@@ -152,10 +156,8 @@ adapter = r"""
 
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",addDebugPanel,{once:true});
   else addDebugPanel();
-  if(enabled()){
-    setTimeout(function(){sendState(typeof db!=="undefined"?db:null);poll()},1200);
-    setInterval(poll,5000);
-  }
+  if(enabled())setTimeout(function(){sendState(typeof db!=="undefined"?db:null);poll()},1200);
+  setInterval(poll,5000);
 })();
 </script>
 """

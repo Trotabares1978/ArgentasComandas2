@@ -16,6 +16,11 @@ checks = {
     "orders are unioned across active sessions": "x.m.db.orders.forEach(merge)",
     "repeated fresh snapshots rebuild the board": "m.db.orders.forEach(merge);",
     "status fields survive independent reconciliation": "c.updatedAt=Math.max(Number(c.updatedAt||0),Number(o.updatedAt||0),incomingStatusAt,localStatusAt)",
+    "preparation timer only renders for active preparation": "s==='preparando'&&Number(o.preparingAt)>0",
+    "preparation timer updates every second": "setInterval(updatePrepTimers,1000)",
+    "preparation elapsed time uses persisted preparingAt": "Date.now()-Number(o.preparingAt)",
+    "Pizarra sends preparingAt when status enters preparation": "status==='preparando'&&o.status!=='preparando'?ts",
+    "Pizarra retains preparation start when status changes": "if(prepAt)o.preparingAt=prepAt",
 }
 
 missing = [label for label, marker in checks.items() if marker not in html]

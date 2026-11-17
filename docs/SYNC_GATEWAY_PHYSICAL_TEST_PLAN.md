@@ -23,7 +23,7 @@ Run this plan only against the isolated `ARGENTAS-Staging` project and a debug A
 | P06 | Process killed after apply, before ACK | Kill B at the apply/ACK boundary if reproducible | Replay must not duplicate the business effect; handler idempotency must hold |
 | P07 | Lost remote ACK | Interrupt B's network after local apply but before server ACK completes | B retries ACK; server eventually records one receipt |
 | P08 | Simultaneous changes | Change separate comandas from A and B at nearly the same time | Both changes arrive; no message is silently skipped |
-| P09 | Late commit | Use the staging SQL concurrency harness to commit an earlier-started transaction after a later one | Both messages remain pending until acknowledged |
+| P09 | Late commit | Open two SQL sessions. In session 1, begin a transaction and insert a message from A without committing. In session 2, begin and insert a second message from A, then commit session 2 first. Finally commit session 1. Confirm B sees both messages pending | Both messages remain pending until acknowledged |
 | P10 | Inbox full | Fill B's local inbox to its configured cap, then send a new page | B does not ACK the page; server keeps it pending; no silent deletion |
 | P11 | Sender revoked | Revoke A in staging, then attempt a new request and check B's pending feed | A is rejected; queued messages from revoked A are not delivered |
 | P12 | Invalid credential | Temporarily configure an invalid token on a test device | Gateway returns unauthorized; legacy transport remains available |

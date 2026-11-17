@@ -17,13 +17,13 @@ This is a staged dual-write path. The native gateway adapter is integrated into 
 - GET limits delivery to currently active, non-revoked sender devices; revoking a sender stops its queued messages from being delivered to other devices.
 - Responses are not cached.
 - CORS is permissive for WebView compatibility; it is not an authentication control. The bearer token is the actual credential.
-- Per-device rate limiting and abuse throttling are not implemented yet. Server-side recipient ACKs and safe retention are also missing; these are release blockers, not optional polish.
+- Per-device rate limiting and abuse throttling are not implemented yet. Safe retention/expiry is also missing; it remains a release blocker.
 
 ## Verified state of the Android gateway foundation
 - The WebView still loads the canonical app assembled from `source/argentas-original-*.part`; the legacy Supabase/Pusher transport remains unchanged.
 - `MainActivity.kt` now exposes a separate `ArgentasNativeGateway` bridge. It does not replace or pretend to implement the legacy Bluetooth methods.
 - `GatewaySecureStore.kt` stores the endpoint, bearer token, outbox, inbox, cursor, and diagnostics using AES-256-GCM with a key held by Android Keystore. The secure preferences are excluded from cloud backup and device transfer because the Keystore key is device-bound.
-- `ArgentasGatewayWorker.kt` uses WorkManager with connected-network constraints. It POSTs queued deliveries in bounded batches of 15, polls up to five GET pages per run, persists inbox rows before advancing the composite cursor, and relies on server idempotency after interrupted/retried sends.
+- `ArgentasGatewayWorker.kt` uses WorkManager with connected-network constraints. It POSTs queued deliveries in bounded batches of 15, persists one pending GET page, and flushes a durable encrypted server-ACK queue before fetching the next page.
 - While the app is foregrounded, `MainActivity` schedules a non-overlapping gateway poll every 15 seconds. WorkManager also retains a 15-minute periodic fallback while Android allows background execution.
 - The queue rejects overflow instead of dropping messages. Inbox page persistence is all-or-nothing with respect to capacity, so the cursor cannot advance past a partially stored page.
 - Gateway configuration accepts only HTTPS Supabase project hosts and validates the high-entropy device-token format. The token is never returned through the JavaScript bridge.
@@ -40,6 +40,15 @@ The production-safe direction is recipient-based delivery receipts: each authent
 ## Supabase Data API exposure check
 
 The migration creates tables in `public` and the Edge Function accesses them through PostgREST. Supabase's 2026-10-30 Data API change means new tables are not automatically exposed by default. In the dedicated staging project, verify the `public` schema is included in the Data API exposed schemas before testing. Keep `anon` and `authenticated` grants revoked and RLS enabled; exposing the schema does not mean granting public table access. Do not use the existing `Manos Verdes Pedidos` project as Argentas staging.
+
+
+## Recipient-based delivery protocol (staging implementation)
+
+The gateway no longer relies on a timestamp cursor. Every GET asks the database for the oldest messages that have no receipt for the authenticated recipient device. The query is repeated from the beginning of the pending set on each poll; a message that commits late remains eligible because it is not hidden behind a saved cursor.
+
+After the app persists a complete page in its encrypted local inbox, the existing router applies each message. Only a successful router result is locally acknowledged. The Android bridge first persists the message IDs in a separate encrypted server-ACK queue, then removes them from the local inbox. WorkManager sends those receipt IDs to the gateway; the database inserts one receipt per (message, recipient) idempotently. Only after the server confirms the receipt does the worker remove it from the local ACK queue. This ordering tolerates process death and network retries without silently dropping an ACK.
+
+The pending query is intentionally page-based: it keeps returning the oldest unacknowledged rows until the client applies and ACKs them, then the next page becomes visible. The worker fetches one page per run; the WebView applies it and schedules the next run through the ACK bridge. No automatic server-side message deletion is enabled. Retention and expiry/revocation policy remain a separate production gate.
 
 ## Release sequence (required)
 1. JavaScript adapter, staging-only dual-write, router handled-result, and ACK-after-apply behavior are implemented in the build pipeline.
@@ -95,12 +104,12 @@ Still required before production: apply the SQL migration and deploy the Edge Fu
 
 ## Additional production gap
 
-The gateway currently uses durable per-device cursors on the client, but it does not yet send server-side recipient acknowledgements or prune old message rows. This avoids deleting messages that an offline device has not received, but the message table can grow indefinitely. Before production, add recipient-level delivery receipts and a retention policy that only prunes after all active recipients have acknowledged (with a documented expiry policy for devices that remain offline for an extended period). Do not add a simple age-based delete while devices rely on their local cursor; that could silently remove messages from an offline phone.
+The gateway now uses recipient-level server receipts instead of client cursors. It still does not prune old message rows. Before production, add a retention policy that only prunes after all eligible active recipients have acknowledged, with a documented expiry policy for devices that remain offline for an extended period. Do not add a simple age-based delete; it could silently remove messages from an offline phone.
 
 
-The native gateway JavaScript bridge is registered only in debuggable builds; release WebViews do not receive this bridge at all. Bounded worker runs chain a continuation when more than 15 outbound messages or a full five-page receive batch remains, rather than leaving backlog until the next periodic poll. The router does not acknowledge a VENDER cancellation or comanda-status message while its parent order is missing, and rejects malformed state/status payloads without advancing the local inbox ACK. This protects against out-of-order arrival; unresolved dependencies remain pending until a later message supplies the missing record.
+The native gateway JavaScript bridge is registered only in debuggable builds; release WebViews do not receive this bridge at all. Bounded worker runs chain a continuation when more than 15 outbound messages remain. Incoming delivery proceeds one page at a time: local application queues durable remote receipts, then the worker fetches the next page. The router does not acknowledge a VENDER cancellation or comanda-status message while its parent order is missing, and rejects malformed state/status payloads without advancing the local inbox ACK. This protects against out-of-order arrival; unresolved dependencies remain pending until a later message supplies the missing record.
 
-The Android outbox and inbox are also bounded by both message count and total encrypted storage size (4 MiB per queue). Gateway GET pages are limited to 10 messages so a worst-case page remains manageable in memory. If the inbox is full, the cursor does not advance; the app must apply and locally acknowledge queued messages before the worker can continue.
+The Android outbox and inbox are bounded by both message count and total encrypted storage size (4 MiB per queue). Gateway GET pages are limited to 10 messages. If the inbox is full, the server continues returning the same unacknowledged page; the app must apply and locally acknowledge queued messages before the worker can continue.
 
 
 Each worker run is capped at 15 POSTs and five GET pages, with a 10-second connect timeout and 10-second read timeout per HTTP request. This leaves execution headroom below WorkManager's ten-minute worker limit, even when a run has to process its full bounded workload.

@@ -45,6 +45,7 @@ internal object GatewaySecureStore {
     fun put(context: Context, name: String, value: String) = synchronized(lock) {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key())
+        cipher.updateAAD(name.toByteArray(Charsets.UTF_8))
         val encrypted = cipher.doFinal(value.toByteArray(Charsets.UTF_8))
         val packed = cipher.iv + encrypted
         check(prefs(context).edit().putString(name, Base64.encodeToString(packed, Base64.NO_WRAP)).commit()) {
@@ -61,6 +62,7 @@ internal object GatewaySecureStore {
             val encrypted = packed.copyOfRange(IV_BYTES, packed.size)
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, iv))
+            cipher.updateAAD(name.toByteArray(Charsets.UTF_8))
             String(cipher.doFinal(encrypted), Charsets.UTF_8)
         } catch (e: Exception) {
             // Never silently replace unreadable data with empty plaintext.

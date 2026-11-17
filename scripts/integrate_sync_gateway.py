@@ -47,7 +47,7 @@ comanda_status_new = """}else if(m.type==='comanda-status'&&m.id&&m.status){
     var incomingTs=Number(m.statusUpdatedAt)||0,localTs=Number(remoteOrder&&remoteOrder.statusUpdatedAt)||0;
     var incomingDevice=String(m.statusDeviceId||''),localDevice=String(remoteOrder&&remoteOrder.statusDeviceId||'');
     var newer=incomingTs>localTs||(incomingTs===localTs&&incomingTs>0&&incomingDevice>localDevice);
-    var validStatus=m.status==='recibido'||m.status==='preparando'||m.status==='entregada'||m.status==='oculta';
+    var validStatus=incomingTs>0&&(m.status==='recibido'||m.status==='preparando'||m.status==='entregada'||m.status==='oculta');
     if(!remoteOrder||!validStatus){handled=false}else{
       if(newer){
         remoteOrder.status=m.status;remoteOrder.statusUpdatedAt=incomingTs;remoteOrder.statusDeviceId=incomingDevice;remoteOrder.updatedAt=Math.max(Number(remoteOrder.updatedAt||0),Number(m.updatedAt||0),incomingTs);

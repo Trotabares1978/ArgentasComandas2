@@ -22,6 +22,7 @@ checks = {
     "sender cannot read own messages": '.neq("sender_device_id", device.device_id)' in EDGE,
     "request body is bounded in UTF-8 bytes": 'new TextEncoder().encode(rawBody).byteLength > MAX_BODY_BYTES' in EDGE,
     "content length is checked before reading": 'Number(contentLength) > MAX_BODY_BYTES' in EDGE,
+    "POST requires JSON content type": "unsupported_media_type" in EDGE and "contentType.toLowerCase()" in EDGE,
     "GET uses a composite timestamp/id cursor": "after_id" in EDGE and "created_at.gt." in EDGE,
     "GET rejects malformed cursor IDs": "invalid_after_id" in EDGE and "/^\\d+$/" in EDGE,
     "GET has deterministic tie-breaking order": '.order("created_at", { ascending: true })' in EDGE and '.order("id", { ascending: true })' in EDGE,

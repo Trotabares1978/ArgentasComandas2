@@ -71,7 +71,7 @@ adapter = r"""
     try{return native&&typeof native.gatewayStatus==="function"?JSON.parse(native.gatewayStatus()||"{}"):{configured:false}}
     catch(e){return {configured:false,error:"status_unavailable"}}
   }
-  function enabled(){return localStorage.getItem(ENABLE_KEY)==="1"}
+  function enabled(){return debugBuild()&&localStorage.getItem(ENABLE_KEY)==="1"}
   function configured(){return !!status().configured}
   function configure(endpoint,token){
     if(!debugBuild()||!native||typeof native.configureGateway!=="function")return false;

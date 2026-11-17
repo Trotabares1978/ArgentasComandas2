@@ -91,7 +91,7 @@ internal object ArgentasGatewayQueue {
             .build()
         WorkManager.getInstance(context).enqueueUniqueWork(
             "argentas-gateway-sync-now",
-            ExistingWorkPolicy.REPLACE,
+            ExistingWorkPolicy.KEEP,
             request
         )
     }

@@ -41,6 +41,10 @@ This is a staged dual-write path. The native gateway adapter is integrated into 
 8. Only after approval, schedule production rollout and keep legacy transport available for rollback.
 9. Revoke legacy `anon`/public access to `argentas_conexion` only after every active client is migrated and verified.
 
+## Applying the migration
+
+The SQL migration is located at `supabase/migrations/20261117000100_argentas_sync_gateway.sql`, the standard Supabase CLI migration directory. Apply it to the dedicated staging project first; do not run it against production during this phase.
+
 ## Provisioning token hashes
 Generate each token on a trusted machine using a cryptographically secure random generator (for example, 32 random bytes encoded as hex). Compute SHA-256 locally and insert only the hash:
 ```sql

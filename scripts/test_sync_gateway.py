@@ -25,6 +25,7 @@ checks = {
     "gateway uses stable delivery identifiers": "if(message.deliveryId)return String(message.deliveryId)" in ASSET and "if(message.msgId)return" in ASSET,
     "gateway dual-writes the existing Supabase transport": "var original=transport.send" in ASSET and "return original.apply(this,arguments)" in ASSET,
     "gateway staging is opt-in and debug-only": "argentas_gateway_staging_enabled" in ASSET and "isDebugBuild" in ASSET,
+    "gateway staging flag is ignored outside debug builds": 'function enabled(){return debugBuild()&&localStorage.getItem(ENABLE_KEY)==="1"}' in ASSET,
     "gateway inbox ACK requires successful existing router handling": "window.onSupabaseMessage(JSON.stringify(payload))===true" in ASSET,
     "gateway skips ephemeral hello messages": 'message.type==="hello"||message.type==="hello-ack"' in ASSET,
     "gateway credentials are not stored in web storage": "localStorage.setItem(ENABLE_KEY" in ASSET and "localStorage.setItem(\"device_token\"" not in ASSET and "localStorage.setItem(\"argentas_gateway_token\"" not in ASSET,

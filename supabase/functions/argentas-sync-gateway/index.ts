@@ -109,7 +109,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const params = new URL(req.url).searchParams;
-  const after = params.get("after") || new Date(Date.now() - 7 * 86400000).toISOString();
+  const after = params.get("after") || "1970-01-01T00:00:00.000Z";
   const afterIdRaw = params.get("after_id") || "0";
   const afterId = Number(afterIdRaw);
   const limitRaw = Number(params.get("limit") || 200);

@@ -23,7 +23,7 @@ This is a staged replacement path. It is deliberately NOT wired into the current
 - The WebView still loads the canonical app assembled from `source/argentas-original-*.part`; the legacy Supabase/Pusher transport remains unchanged.
 - `MainActivity.kt` now exposes a separate `ArgentasNativeGateway` bridge. It does not replace or pretend to implement the legacy Bluetooth methods.
 - `GatewaySecureStore.kt` stores the endpoint, bearer token, outbox, inbox, cursor, and diagnostics using AES-256-GCM with a key held by Android Keystore. The secure preferences are excluded from cloud backup and device transfer because the Keystore key is device-bound.
-- `ArgentasGatewayWorker.kt` uses WorkManager with connected-network constraints. It POSTs queued deliveries, polls GET pages, persists inbox rows before advancing the composite cursor, and relies on server idempotency after interrupted/retried sends.
+- `ArgentasGatewayWorker.kt` uses WorkManager with connected-network constraints. It POSTs queued deliveries in bounded batches of 20, polls up to five GET pages per run, persists inbox rows before advancing the composite cursor, and relies on server idempotency after interrupted/retried sends.
 - While the app is foregrounded, `MainActivity` schedules a non-overlapping gateway poll every 15 seconds. WorkManager also retains a 15-minute periodic fallback while Android allows background execution.
 - The queue rejects overflow instead of dropping messages. Inbox page persistence is all-or-nothing with respect to capacity, so the cursor cannot advance past a partially stored page.
 - Gateway configuration accepts only HTTPS Supabase project hosts and validates the high-entropy device-token format. The token is never returned through the JavaScript bridge.

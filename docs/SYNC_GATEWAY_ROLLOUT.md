@@ -1,7 +1,7 @@
 # Argentas sync gateway: deployment and device provisioning
 
 ## Status
-This is a staged dual-write path. The native gateway adapter is integrated into the Android build pipeline but remains inactive unless an administrator explicitly configures and enables it in a debug build. The isolated Supabase staging project has been created and both schema migrations have been applied; the Edge Function has not yet been deployed. Nothing has been deployed to production. The existing Supabase/Pusher transport remains authoritative and available as the fallback until the gateway has passed physical-device and soak testing.
+This is a staged dual-write path. The native gateway adapter is integrated into the Android build pipeline but remains inactive unless an administrator explicitly configures and enables it in a debug build. The isolated Supabase staging project is active, all three schema migrations are applied, and the Edge Function is deployed with custom bearer-token authentication. No device tokens have been provisioned, so no device can use the gateway yet. Nothing has been deployed to production. The existing Supabase/Pusher transport remains authoritative and available as the fallback until the gateway has passed physical-device and soak testing.
 
 ## Security model
 - Each physical device receives an independent cryptographically random bearer token (at least 256 bits).
@@ -63,7 +63,7 @@ The pending query is intentionally page-based: it keeps returning the oldest una
 
 ## Applying the migration
 
-The SQL migrations are `supabase/migrations/20261117000100_argentas_sync_gateway.sql` and `supabase/migrations/20261117000200_argentas_sync_recipient_receipts.sql`. Both have been applied to the isolated `ARGENTAS-Staging` project only. Do not run them against production during this phase.
+The SQL migrations are `supabase/migrations/20261117000100_argentas_sync_gateway.sql`, `supabase/migrations/20261117000200_argentas_sync_recipient_receipts.sql`, and `supabase/migrations/20261117000300_argentas_sync_rpc_search_path.sql`. All three have been applied to the isolated `ARGENTAS-Staging` project only. Do not run them against production during this phase.
 
 ## Provisioning token hashes
 Generate each token on a trusted machine using a cryptographically secure random generator (for example, 32 random bytes encoded as hex). Compute SHA-256 locally and insert only the hash:
@@ -83,7 +83,7 @@ Do not drop the new tables during rollback. Revert Android clients to the legacy
 
 ## Known remaining work
 - Add Android instrumentation tests for queue recovery, encryption failure, and WorkManager retry behavior; static contract tests and CI compilation are in place.
-- The dedicated `ARGENTAS-Staging` project is active and both schema migrations are applied; no device tokens are provisioned yet.
+- The dedicated `ARGENTAS-Staging` project is active, all three schema migrations are applied, and the Edge Function is deployed; no device tokens are provisioned yet.
 - Add a staging environment and run real gateway integration tests before any production rollout.
 - Replace or repair the nonfunctional Bluetooth controls; do not advertise them as available until native methods exist and two physical devices pass testing.
 - A guided pairing flow is not implemented; current provisioning is an admin-operated staging step.
@@ -99,7 +99,7 @@ Credential provisioning is intentionally restricted to debug builds. In a debug 
 
 The gateway adapter bounds each serialized message to 240 KB before enqueueing (below the 256 KB server limit) and uses the app's delivery/message/request identifiers for idempotent retries. Staging is opt-in and does not disable or replace the existing Supabase/Pusher transport. Do not enable it until a staging Supabase project has the migration applied and each test device has its own provisioned token.
 
-Still required before production: deploy the Edge Function to the isolated staging project; provision at least two separate device tokens; run physical two-device tests including offline/retry, duplicate delivery, simultaneous edits, queue-full behavior, late-commit ordering, and app restart; then perform a soak test. No production migration, Edge Function deployment, or production credential provisioning has been performed.
+The Edge Function is deployed to staging as `https://cybaeuzrwviucsgegawz.supabase.co/functions/v1/argentas-sync-gateway` with `verify_jwt=false`; the function authenticates each request with its own device bearer token. A staging SQL smoke test passed: device A's message appeared for B, disappeared for B after a receipt, B's own message was excluded, and repeated ACK was idempotent. Still required before production: provision at least two separate physical-device tokens; run two-device tests including offline/retry, duplicate delivery, simultaneous edits, queue-full behavior, late-commit ordering, and app restart; then perform a soak test. No production migration, Edge Function deployment, or production credential provisioning has been performed.
 
 
 ## Additional production gap

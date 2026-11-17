@@ -64,7 +64,7 @@ checks = {
     "gateway bearer tokens are high-entropy format checked": 'Regex("[A-Za-z0-9_-]{32,256}")' in WORKER,
     "outbox is persisted before scheduling network work": 'writeArray(context, OUTBOX, queue)' in WORKER and 'enqueueUniqueWork(' in WORKER,
     "outbox is idempotent by delivery ID": 'optString("deliveryId") == deliveryId' in WORKER,
-    "WorkManager POST batch is bounded": "const val MAX_POSTS_PER_RUN = 20" in WORKER and "minOf(outgoing.length(), MAX_POSTS_PER_RUN)" in WORKER,
+    "WorkManager POST batch is bounded": "const val MAX_POSTS_PER_RUN = 15" in WORKER and "minOf(outgoing.length(), MAX_POSTS_PER_RUN)" in WORKER,
     "outbox has a hard encrypted byte ceiling": "MAX_QUEUE_BYTES = 4 * 1024 * 1024" in WORKER and "queue.toString().toByteArray(Charsets.UTF_8).size > MAX_QUEUE_BYTES" in WORKER,
     "inbox page is byte-bounded before cursor advances": "merged.toString().toByteArray(Charsets.UTF_8).size > MAX_QUEUE_BYTES" in WORKER,
     "GET page size limits worst-case response memory": 'append("limit=10")' in WORKER,

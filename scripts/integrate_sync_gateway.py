@@ -31,35 +31,22 @@ if html.count(cancel_draft) == 1:
 elif html.count(cancel_draft_new) != 1:
     raise SystemExit("Could not safely guard VENDER cancel delivery ACK")
 
-comanda_status = """}else if(m.type==='comanda-status'&&m.id&&m.status){
-    var remoteOrder=db.orders.find(function(o){return o&&String(o.id)===String(m.id)});
-    var incomingTs=Number(m.statusUpdatedAt)||0,localTs=Number(remoteOrder&&remoteOrder.statusUpdatedAt)||0;
-    var incomingDevice=String(m.statusDeviceId||''),localDevice=String(remoteOrder&&remoteOrder.statusDeviceId||'');
-    var newer=incomingTs>localTs||(incomingTs===localTs&&incomingTs>0&&incomingDevice>localDevice);
-    if(remoteOrder&&newer&&(m.status==='recibido'||m.status==='preparando'||m.status==='entregada'||m.status==='oculta')){
-      remoteOrder.status=m.status;remoteOrder.statusUpdatedAt=incomingTs;remoteOrder.statusDeviceId=incomingDevice;remoteOrder.updatedAt=Math.max(Number(remoteOrder.updatedAt||0),Number(m.updatedAt||0),incomingTs);
-      save();importOrdersToCaja([remoteOrder]);refreshComandasUI();renderAll();renderOrders();sync();
-    }
-    if(m.deliveryId&&window.ArgentasSupabaseTransport)try{window.ArgentasSupabaseTransport.send(JSON.stringify({type:'comanda-status-ack',deliveryId:String(m.deliveryId)}))}catch(e){}
-    return"""
-comanda_status_new = """}else if(m.type==='comanda-status'&&m.id&&m.status){
-    var remoteOrder=db.orders.find(function(o){return o&&String(o.id)===String(m.id)});
-    var incomingTs=Number(m.statusUpdatedAt)||0,localTs=Number(remoteOrder&&remoteOrder.statusUpdatedAt)||0;
-    var incomingDevice=String(m.statusDeviceId||''),localDevice=String(remoteOrder&&remoteOrder.statusDeviceId||'');
-    var newer=incomingTs>localTs||(incomingTs===localTs&&incomingTs>0&&incomingDevice>localDevice);
-    var validStatus=incomingTs>0&&(m.status==='recibido'||m.status==='preparando'||m.status==='entregada'||m.status==='oculta');
-    if(!remoteOrder||!validStatus){handled=false}else{
-      if(newer){
-        remoteOrder.status=m.status;remoteOrder.statusUpdatedAt=incomingTs;remoteOrder.statusDeviceId=incomingDevice;remoteOrder.updatedAt=Math.max(Number(remoteOrder.updatedAt||0),Number(m.updatedAt||0),incomingTs);
-        save();importOrdersToCaja([remoteOrder]);refreshComandasUI();renderAll();renderOrders();sync();
-      }
-      if(m.deliveryId&&window.ArgentasSupabaseTransport)try{window.ArgentasSupabaseTransport.send(JSON.stringify({type:'comanda-status-ack',deliveryId:String(m.deliveryId)}))}catch(e){}
-    }
-    return"""
-if html.count(comanda_status) == 1:
-    html = html.replace(comanda_status, comanda_status_new, 1)
-elif html.count(comanda_status_new) != 1:
-    raise SystemExit("Could not safely guard comanda status delivery ACK")
+# The preceding comanda reliability patch inserts this dependency guard.
+# Convert it to an explicit negative result so the gateway inbox is not ACKed
+# before the parent order is restored. Also reject unsupported/untimestamped states.
+unknown_order = "if(!remoteOrder)return; /* No ACK until the full snapshot has restored this comanda. */"
+unknown_order_new = "if(!remoteOrder){handled=false;return} /* Wait for the full comanda snapshot. */"
+if html.count(unknown_order) == 1:
+    html = html.replace(unknown_order, unknown_order_new, 1)
+elif html.count(unknown_order_new) != 1:
+    raise SystemExit("Could not safely guard status messages for unknown comandas")
+
+status_validation = "if(!remoteOrder){handled=false;return} /* Wait for the full comanda snapshot. */"
+status_validation_new = status_validation + "if(!(Number(m.statusUpdatedAt)>0)||!(m.status==='recibido'||m.status==='preparando'||m.status==='entregada'||m.status==='oculta')){handled=false;return}"
+if html.count(status_validation) == 1:
+    html = html.replace(status_validation, status_validation_new, 1)
+elif html.count(status_validation_new) != 1:
+    raise SystemExit("Could not safely validate comanda status messages")
 
 invalid_state = "if(!m.db||typeof m.db!=='object'||!m.sessionId)return;"
 invalid_state_new = "if(!m.db||typeof m.db!=='object'||!m.sessionId){handled=false;return}"

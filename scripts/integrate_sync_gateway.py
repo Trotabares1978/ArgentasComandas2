@@ -47,7 +47,7 @@ adapter = r"""
     if(!debugBuild()||!configured())return false;
     localStorage.setItem(ENABLE_KEY,"1");
     if(native&&typeof native.syncGatewayNow==="function")native.syncGatewayNow();
-    sendState(window.db);
+    sendState(typeof db!=="undefined"?db:null);
     poll();
     return true;
   }
@@ -58,12 +58,14 @@ adapter = r"""
   function sendState(db){
     if(!enabled()||!configured()||!db||!Array.isArray(db.orders)||!Array.isArray(db.products))return false;
     var stamp=Number(db.updatedAt)||Date.now();
-    var deliveryId="state:"+stamp+":"+db.orders.length+":"+db.products.length;
     var payload={type:"state",role:"caja",db:db};
     var json;
     try{
       json=JSON.stringify(payload);
       if(new TextEncoder().encode(json).length>240000)return false;
+      var hash=2166136261;
+      for(var i=0;i<json.length;i++){hash^=json.charCodeAt(i);hash=Math.imul(hash,16777619)}
+      var deliveryId="state:"+stamp+":"+(hash>>>0).toString(16);
       var accepted=native.enqueueGatewayMessage(deliveryId,json)===true;
       if(accepted&&typeof native.syncGatewayNow==="function")native.syncGatewayNow();
       return accepted;
@@ -151,7 +153,7 @@ adapter = r"""
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",addDebugPanel,{once:true});
   else addDebugPanel();
   if(enabled()){
-    setTimeout(function(){sendState(window.db);poll()},1200);
+    setTimeout(function(){sendState(typeof db!=="undefined"?db:null);poll()},1200);
     setInterval(poll,5000);
   }
 })();

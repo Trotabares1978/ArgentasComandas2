@@ -57,6 +57,8 @@ checks = {
     "WorkManager has connected-network constraints": "NetworkType.CONNECTED" in WORKER and "PeriodicWorkRequestBuilder" in WORKER,
     "native bridge exposes gateway queue without exposing token getter": "enqueueGatewayMessage" in ACTIVITY and "gatewayInbox" in ACTIVITY and "fun getGatewayToken" not in ACTIVITY,
     "native bridge exposes configuration and ACK methods": "configureGateway" in ACTIVITY and "acknowledgeGatewayInbox" in ACTIVITY,
+    "foreground polling stops when Activity pauses": "gatewayPollHandler.postDelayed(gatewayPoll, 15_000)" in ACTIVITY and "gatewayPollHandler.removeCallbacks(gatewayPoll)" in ACTIVITY,
+    "foreground polling does not cancel active worker": "ExistingWorkPolicy.KEEP" in WORKER,
     "WorkManager dependency is installed": 'androidx.work:work-runtime-ktx:2.10.0' in GRADLE,
     "Android backup excludes Keystore-bound preferences": 'android:fullBackupContent="@xml/backup_rules"' in MANIFEST and 'android:dataExtractionRules="@xml/data_extraction_rules"' in MANIFEST and "argentas_gateway_secure_v1.xml" in BACKUP and "argentas_gateway_secure_v1.xml" in EXTRACTION,
 }

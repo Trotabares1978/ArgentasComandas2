@@ -1,7 +1,7 @@
 # Argentas sync gateway: deployment and device provisioning
 
 ## Status
-This is a staged dual-write path. The native gateway adapter is integrated into the Android build pipeline but remains inactive unless an administrator explicitly configures and enables it in a debug build. The isolated Supabase staging project is active, all four schema migrations are applied, and the Edge Function is deployed with custom bearer-token authentication. No device tokens have been provisioned, so no device can use the gateway yet. Nothing has been deployed to production. The existing Supabase/Pusher transport remains authoritative and available as the fallback until the gateway has passed physical-device and soak testing.
+This is a staged dual-write path. The native gateway adapter is integrated into the Android build pipeline but remains inactive unless an administrator explicitly configures and enables it in a debug build. The isolated Supabase staging project is active, all five schema migrations are applied, and the Edge Function is deployed with custom bearer-token authentication. No device tokens have been provisioned, so no device can use the gateway yet. Nothing has been deployed to production. The existing Supabase/Pusher transport remains authoritative and available as the fallback until the gateway has passed physical-device and soak testing.
 
 ## Security model
 - Each physical device receives an independent cryptographically random bearer token (at least 256 bits).
@@ -61,7 +61,7 @@ The pending query is intentionally page-based: it keeps returning the oldest una
 
 ## Applying the migration
 
-The SQL migrations are `supabase/migrations/20261117000100_argentas_sync_gateway.sql`, `supabase/migrations/20261117000200_argentas_sync_recipient_receipts.sql`, `supabase/migrations/20261117000300_argentas_sync_rpc_search_path.sql`, and `supabase/migrations/20261117000400_argentas_sync_rate_limits.sql`. All four have been applied to the isolated `ARGENTAS-Staging` project only. Do not run them against production during this phase.
+The SQL migrations are `supabase/migrations/20261117000100_argentas_sync_gateway.sql`, `supabase/migrations/20261117000200_argentas_sync_recipient_receipts.sql`, `supabase/migrations/20261117000300_argentas_sync_rpc_search_path.sql`, and `supabase/migrations/20261117000400_argentas_sync_rate_limits.sql`, and `supabase/migrations/20261117000500_argentas_sync_remove_cursor_indexes.sql`. All five have been applied to the isolated `ARGENTAS-Staging` project only. Do not run them against production during this phase.
 
 ## Provisioning token hashes
 Generate each token on a trusted machine using a cryptographically secure random generator (for example, 32 random bytes encoded as hex). Compute SHA-256 locally and insert only the hash:

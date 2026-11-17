@@ -32,8 +32,8 @@ replace_once(
     "Defensively ignore own recovered state rows",
 )
 replace_once(
-    "statusRows.reverse().forEach(function(row){if(!row||!row.mensaje)return;",
-    "statusRows.reverse().forEach(function(row){if(!row||!row.mensaje||String(row.device_id||'')===DEVICE_ID)return;try{var parsed=JSON.parse(row.mensaje);if(parsed.type==='comanda-status'&&String(parsed.statusDeviceId||'')!==DEVICE_ID)message(row.mensaje)}catch(e){}",
+    "statusRows.reverse().forEach(function(row){if(!row||!row.mensaje)return;try{var parsed=JSON.parse(row.mensaje);if(parsed.type==='comanda-status')message(row.mensaje)}catch(e){}});",
+    "statusRows.reverse().forEach(function(row){if(!row||!row.mensaje||String(row.device_id||'')===DEVICE_ID)return;try{var parsed=JSON.parse(row.mensaje);if(parsed.type==='comanda-status'&&String(parsed.statusDeviceId||'')!==DEVICE_ID)message(row.mensaje)}catch(e){}});",
     "Defensively ignore own recovered status rows",
 )
 

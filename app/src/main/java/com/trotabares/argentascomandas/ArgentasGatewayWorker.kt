@@ -15,7 +15,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
-import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 internal object ArgentasGatewayQueue {
@@ -174,7 +173,7 @@ internal object ArgentasGatewayQueue {
             val id = message.opt("id")?.toString() ?: continue
             if (known.add(id)) additions.add(message)
         }
-        // Never advance the cursor after persisting only part of a server page.
+        // Reject the whole page if it cannot be stored; the server will resend it.
         if (old.length() + additions.size > MAX_QUEUE) return false
         val merged = JSONArray()
         for (i in 0 until old.length()) old.optJSONObject(i)?.let { merged.put(it) }
@@ -272,9 +271,8 @@ class ArgentasGatewayWorker(context: Context, params: WorkerParameters) : Worker
                 return Result.success()
             }
             ArgentasGatewayQueue.markSuccess(applicationContext)
-            // A bounded run must chain another worker when backlog remains.
-            // Otherwise >15 pending sends or >50 received messages wait until the
-            // next periodic poll, which can be a long delay in foreground use.
+            // Chain only when outbound messages remain beyond this run POST cap.
+            // Incoming pages advance only after app handling and durable server ACKs.
             if (outgoing.length() > MAX_POSTS_PER_RUN) {
                 ArgentasGatewayQueue.scheduleContinuation(applicationContext)
             }

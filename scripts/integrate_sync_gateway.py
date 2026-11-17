@@ -13,6 +13,68 @@ if "ArgentasSupabaseTransport" not in html or "onSupabaseMessage" not in html:
 if html.count("</body>") != 1:
     raise SystemExit(f"Expected exactly one </body>, found {html.count('</body>')}")
 
+# Do not ACK dependent records that have not arrived yet. The gateway inbox
+# keeps these messages pending so a later page can supply the missing order.
+cancel_draft = """}else if(m.type==='vender-cancel-draft'&&m.draftId){
+    var cancelId='v'+String(m.draftId),cancelOrder=db.orders.find(function(o){return o&&o.id===cancelId&&o.source==='vender'});
+    if(cancelOrder){cancelOrder.status='oculta';cancelOrder.updatedAt=Date.now();save();importOrdersToCaja([cancelOrder]);renderAll();sync()}
+    sendVenderAck(m.deliveryId||('vender-cancel-draft:'+String(m.draftId)));
+    return
+  }else if(m.type==='vender-ack'"""
+cancel_draft_new = """}else if(m.type==='vender-cancel-draft'&&m.draftId){
+    var cancelId='v'+String(m.draftId),cancelOrder=db.orders.find(function(o){return o&&o.id===cancelId&&o.source==='vender'});
+    if(cancelOrder){cancelOrder.status='oculta';cancelOrder.updatedAt=Date.now();save();importOrdersToCaja([cancelOrder]);renderAll();sync();sendVenderAck(m.deliveryId||('vender-cancel-draft:'+String(m.draftId)))}else{handled=false}
+    return
+  }else if(m.type==='vender-ack'"""
+if html.count(cancel_draft) == 1:
+    html = html.replace(cancel_draft, cancel_draft_new, 1)
+elif html.count(cancel_draft_new) != 1:
+    raise SystemExit("Could not safely guard VENDER cancel delivery ACK")
+
+comanda_status = """}else if(m.type==='comanda-status'&&m.id&&m.status){
+    var remoteOrder=db.orders.find(function(o){return o&&String(o.id)===String(m.id)});
+    var incomingTs=Number(m.statusUpdatedAt)||0,localTs=Number(remoteOrder&&remoteOrder.statusUpdatedAt)||0;
+    var incomingDevice=String(m.statusDeviceId||''),localDevice=String(remoteOrder&&remoteOrder.statusDeviceId||'');
+    var newer=incomingTs>localTs||(incomingTs===localTs&&incomingTs>0&&incomingDevice>localDevice);
+    if(remoteOrder&&newer&&(m.status==='recibido'||m.status==='preparando'||m.status==='entregada'||m.status==='oculta')){
+      remoteOrder.status=m.status;remoteOrder.statusUpdatedAt=incomingTs;remoteOrder.statusDeviceId=incomingDevice;remoteOrder.updatedAt=Math.max(Number(remoteOrder.updatedAt||0),Number(m.updatedAt||0),incomingTs);
+      save();importOrdersToCaja([remoteOrder]);refreshComandasUI();renderAll();renderOrders();sync();
+    }
+    if(m.deliveryId&&window.ArgentasSupabaseTransport)try{window.ArgentasSupabaseTransport.send(JSON.stringify({type:'comanda-status-ack',deliveryId:String(m.deliveryId)}))}catch(e){}
+    return"""
+comanda_status_new = """}else if(m.type==='comanda-status'&&m.id&&m.status){
+    var remoteOrder=db.orders.find(function(o){return o&&String(o.id)===String(m.id)});
+    var incomingTs=Number(m.statusUpdatedAt)||0,localTs=Number(remoteOrder&&remoteOrder.statusUpdatedAt)||0;
+    var incomingDevice=String(m.statusDeviceId||''),localDevice=String(remoteOrder&&remoteOrder.statusDeviceId||'');
+    var newer=incomingTs>localTs||(incomingTs===localTs&&incomingTs>0&&incomingDevice>localDevice);
+    var validStatus=m.status==='recibido'||m.status==='preparando'||m.status==='entregada'||m.status==='oculta';
+    if(!remoteOrder||!validStatus){handled=false}else{
+      if(newer){
+        remoteOrder.status=m.status;remoteOrder.statusUpdatedAt=incomingTs;remoteOrder.statusDeviceId=incomingDevice;remoteOrder.updatedAt=Math.max(Number(remoteOrder.updatedAt||0),Number(m.updatedAt||0),incomingTs);
+        save();importOrdersToCaja([remoteOrder]);refreshComandasUI();renderAll();renderOrders();sync();
+      }
+      if(m.deliveryId&&window.ArgentasSupabaseTransport)try{window.ArgentasSupabaseTransport.send(JSON.stringify({type:'comanda-status-ack',deliveryId:String(m.deliveryId)}))}catch(e){}
+    }
+    return"""
+if html.count(comanda_status) == 1:
+    html = html.replace(comanda_status, comanda_status_new, 1)
+elif html.count(comanda_status_new) != 1:
+    raise SystemExit("Could not safely guard comanda status delivery ACK")
+
+invalid_state = "if(!m.db||typeof m.db!=='object'||!m.sessionId)return;"
+invalid_state_new = "if(!m.db||typeof m.db!=='object'||!m.sessionId){handled=false;return}"
+if html.count(invalid_state) == 1:
+    html = html.replace(invalid_state, invalid_state_new, 1)
+elif html.count(invalid_state_new) != 1:
+    raise SystemExit("Could not safely guard invalid state messages")
+
+invalid_state_stamp = "if(!sid||!sentAt)return;"
+invalid_state_stamp_new = "if(!sid||!sentAt){handled=false;return}"
+if html.count(invalid_state_stamp) == 1:
+    html = html.replace(invalid_state_stamp, invalid_state_stamp_new, 1)
+elif html.count(invalid_state_stamp_new) != 1:
+    raise SystemExit("Could not safely guard state timestamps")
+
 # Make the existing router report whether it actually applied a message.
 router_start = "handle:function(raw){raw.trim().split('\\n').filter(Boolean).forEach(function(line){try{"
 router_start_new = "handle:function(raw){var handled=true;raw.trim().split('\\n').filter(Boolean).forEach(function(line){try{"

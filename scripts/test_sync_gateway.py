@@ -83,6 +83,7 @@ checks = {
     "native bridge exposes gateway queue without exposing token getter": "enqueueGatewayMessage" in ACTIVITY and "gatewayInbox" in ACTIVITY and "fun getGatewayToken" not in ACTIVITY,
     "native bridge exposes configuration and ACK methods": "configureGateway" in ACTIVITY and "acknowledgeGatewayInbox" in ACTIVITY,
     "gateway credential provisioning is debug-build-only": "fun isDebugBuild()" in ACTIVITY and "if (!isDebugBuild()) return false" in ACTIVITY,
+    "gateway JavaScript bridge is not registered in release WebViews": "if (isDebuggable)" in ACTIVITY and "webView.addJavascriptInterface(NativeBridge(), \\"ArgentasNativeGateway\\")" in ACTIVITY,
     "WebView blocks untrusted frames from JavaScript bridge": "if (!request.isForMainFrame) return true" in ACTIVITY and 'uri.path?.startsWith("/android_asset/") == true' in ACTIVITY,
     "foreground polling stops when Activity pauses": "gatewayPollHandler.postDelayed(gatewayPoll, 15_000)" in ACTIVITY and "gatewayPollHandler.removeCallbacks(gatewayPoll)" in ACTIVITY,
     "foreground polling does not cancel active worker": "ExistingWorkPolicy.KEEP" in WORKER,

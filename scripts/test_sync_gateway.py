@@ -41,6 +41,7 @@ checks = {
     "pending query stable ID ordering and bounded limit": "order by m.id asc" in RECEIPTS_SQL and "least(coalesce(p_limit, 10), 100)" in RECEIPTS_SQL,
     "ACK RPC verifies active recipient and excludes own messages": "recipient_device_inactive" in RECEIPTS_SQL and "m.sender_device_id <> p_recipient_device_id" in RECEIPTS_SQL,
     "receipt RPCs service-role only": "grant execute on function public.argentas_sync_pending_messages" in RECEIPTS_SQL and "grant execute on function public.argentas_sync_ack_messages" in RECEIPTS_SQL,
+    "receipt RPCs pin empty search_path": "set search_path = '';" in (ROOT / "supabase/migrations/20261117000300_argentas_sync_rpc_search_path.sql").read_text(),
     "Android secure storage uses Android Keystore": '"AndroidKeyStore"' in SECURE and "KeyGenParameterSpec" in SECURE,
     "Android secure storage uses AES-GCM": '"AES/GCM/NoPadding"' in SECURE and "GCMParameterSpec(128, iv)" in SECURE,
     "encrypted preferences bind ciphertext to key": SECURE.count("cipher.updateAAD(name.toByteArray(Charsets.UTF_8))") == 2,

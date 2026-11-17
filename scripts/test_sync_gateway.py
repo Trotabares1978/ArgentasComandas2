@@ -77,6 +77,7 @@ checks = {
     "inbox page is byte-bounded before cursor advances": "merged.toString().toByteArray(Charsets.UTF_8).size > MAX_QUEUE_BYTES" in WORKER,
     "GET page size limits worst-case response memory": 'append("limit=10")' in WORKER,
     "inbox page capacity is checked before persistence": "old.length() + additions.size > MAX_QUEUE" in WORKER,
+    "duplicate-only inbox pages can advance a full inbox cursor": "if (old.length() >= MAX_QUEUE) return false" not in WORKER and "if (old.length() + additions.size > MAX_QUEUE) return false" in WORKER,
     "inbox is persisted before cursor advances": WORKER.index("addInboxPage(applicationContext, messages)") < WORKER.index("saveCursor(applicationContext, next)"),
     "gateway GET cursor values are URL encoded": 'URLEncoder.encode(cursor.optString("after"), "UTF-8")' in WORKER,
     "gateway redirects are disabled to protect bearer token": "instanceFollowRedirects = false" in WORKER,

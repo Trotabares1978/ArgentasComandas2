@@ -1,7 +1,7 @@
 # Argentas sync gateway: deployment and device provisioning
 
 ## Status
-This is a staged dual-write path. The native gateway adapter is integrated into the Android build pipeline but remains inactive unless an administrator explicitly configures and enables it in a debug build. It has NOT been deployed to Supabase staging or production. The existing Supabase/Pusher transport remains authoritative and available as the fallback until the gateway has passed physical-device and soak testing.
+This is a staged dual-write path. The native gateway adapter is integrated into the Android build pipeline but remains inactive unless an administrator explicitly configures and enables it in a debug build. The isolated Supabase staging project has been created and both schema migrations have been applied; the Edge Function has not yet been deployed. Nothing has been deployed to production. The existing Supabase/Pusher transport remains authoritative and available as the fallback until the gateway has passed physical-device and soak testing.
 
 ## Security model
 - Each physical device receives an independent cryptographically random bearer token (at least 256 bits).
@@ -11,7 +11,7 @@ This is a staged dual-write path. The native gateway adapter is integrated into 
 - Public/anonymous roles have no grants on the new tables.
 - `(sender_device_id, delivery_id)` is unique. Retrying the same delivery is acknowledged as a duplicate without creating another row.
 - A device can only read messages sent by other registered devices. The endpoint currently treats all active devices in this single Argentas project as one trusted installation group.
-- GET currently uses a composite `(created_at, id)` cursor (`after` + `after_id`). This resolves ties for rows sharing a timestamp, but **it is not a lossless delivery guarantee under concurrent transactions**: PostgreSQL `now()` is the transaction start time, so a transaction that began earlier can commit after a later transaction. A client may advance its cursor past the later row and never see the late-committing earlier row. Treat cursor pagination as provisional only; do not approve production until recipient-level server ACKs and an unacked-message query replace cursor-only delivery.
+- GET now uses recipient-specific pending delivery and durable server receipts; it does not rely on a timestamp cursor.
 - POST enforces the 256 KB ceiling while streaming the request body (including chunked requests), before JSON parsing; it accepts only the exact `application/json` media type and rejects invalid UTF-8.
 - GET accepts only strict ISO-8601 cursor timestamps before building its PostgREST filter, preventing arbitrary filter syntax from entering the query.
 - GET limits delivery to currently active, non-revoked sender devices; revoking a sender stops its queued messages from being delivered to other devices.
@@ -22,10 +22,10 @@ This is a staged dual-write path. The native gateway adapter is integrated into 
 ## Verified state of the Android gateway foundation
 - The WebView still loads the canonical app assembled from `source/argentas-original-*.part`; the legacy Supabase/Pusher transport remains unchanged.
 - `MainActivity.kt` now exposes a separate `ArgentasNativeGateway` bridge. It does not replace or pretend to implement the legacy Bluetooth methods.
-- `GatewaySecureStore.kt` stores the endpoint, bearer token, outbox, inbox, cursor, and diagnostics using AES-256-GCM with a key held by Android Keystore. The secure preferences are excluded from cloud backup and device transfer because the Keystore key is device-bound.
+- `GatewaySecureStore.kt` stores the endpoint, bearer token, outbox, inbox, durable remote-ACK queue, and diagnostics using AES-256-GCM with a key held by Android Keystore. The secure preferences are excluded from cloud backup and device transfer because the Keystore key is device-bound.
 - `ArgentasGatewayWorker.kt` uses WorkManager with connected-network constraints. It POSTs queued deliveries in bounded batches of 15, persists one pending GET page, and flushes a durable encrypted server-ACK queue before fetching the next page.
 - While the app is foregrounded, `MainActivity` schedules a non-overlapping gateway poll every 15 seconds. WorkManager also retains a 15-minute periodic fallback while Android allows background execution.
-- The queue rejects overflow instead of dropping messages. Inbox page persistence is all-or-nothing with respect to capacity, so the cursor cannot advance past a partially stored page.
+- The queue rejects overflow instead of dropping messages. Inbox page persistence is all-or-nothing with respect to capacity, so the server keeps returning the same pending page until the app can store and apply it.
 - Gateway configuration accepts only HTTPS Supabase project hosts and validates the high-entropy device-token format. The token is never returned through the JavaScript bridge.
 - `scripts/integrate_sync_gateway.py` wraps the existing `ArgentasSupabaseTransport.send` for staging-only dual-write and routes inbox messages through `window.onSupabaseMessage`. The router now returns an explicit handled result; local inbox ACK occurs only when it returns true. No staging or production token is provisioned, and no gateway traffic is being sent.
 - The old Bluetooth controls remain nonfunctional in this revision; the new HTTP gateway is a separate staged path.
@@ -39,7 +39,7 @@ The production-safe direction is recipient-based delivery receipts: each authent
 
 ## Supabase Data API exposure check
 
-The migration creates tables in `public` and the Edge Function accesses them through PostgREST. Supabase's 2026-10-30 Data API change means new tables are not automatically exposed by default. In the dedicated staging project, verify the `public` schema is included in the Data API exposed schemas before testing. Keep `anon` and `authenticated` grants revoked and RLS enabled; exposing the schema does not mean granting public table access. Do not use the existing `Manos Verdes Pedidos` project as Argentas staging.
+The migrations create tables and RPCs in `public`. The isolated staging project has the standard `public` schema available to the Data API; table grants remain restricted to `service_role`, RLS is enabled, and RPC execution is revoked from `public`, `anon` and `authenticated`. Supabase's 2026-10-30 Data API change means new tables are not automatically exposed by default; explicit service-role grants are included. Do not use the existing `Manos Verdes Pedidos` project as Argentas staging.
 
 
 ## Recipient-based delivery protocol (staging implementation)
@@ -63,7 +63,7 @@ The pending query is intentionally page-based: it keeps returning the oldest una
 
 ## Applying the migration
 
-The SQL migration is located at `supabase/migrations/20261117000100_argentas_sync_gateway.sql`, the standard Supabase CLI migration directory. Apply it to the dedicated staging project first; do not run it against production during this phase.
+The SQL migrations are `supabase/migrations/20261117000100_argentas_sync_gateway.sql` and `supabase/migrations/20261117000200_argentas_sync_recipient_receipts.sql`. Both have been applied to the isolated `ARGENTAS-Staging` project only. Do not run them against production during this phase.
 
 ## Provisioning token hashes
 Generate each token on a trusted machine using a cryptographically secure random generator (for example, 32 random bytes encoded as hex). Compute SHA-256 locally and insert only the hash:
@@ -83,7 +83,7 @@ Do not drop the new tables during rollback. Revert Android clients to the legacy
 
 ## Known remaining work
 - Add Android instrumentation tests for queue recovery, encryption failure, and WorkManager retry behavior; static contract tests and CI compilation are in place.
-- Provision a dedicated staging Supabase project and per-device tokens; none are currently provisioned.
+- The dedicated `ARGENTAS-Staging` project is active and both schema migrations are applied; no device tokens are provisioned yet.
 - Add a staging environment and run real gateway integration tests before any production rollout.
 - Replace or repair the nonfunctional Bluetooth controls; do not advertise them as available until native methods exist and two physical devices pass testing.
 - A guided pairing flow is not implemented; current provisioning is an admin-operated staging step.
@@ -99,7 +99,7 @@ Credential provisioning is intentionally restricted to debug builds. In a debug 
 
 The gateway adapter bounds each serialized message to 240 KB before enqueueing (below the 256 KB server limit) and uses the app's delivery/message/request identifiers for idempotent retries. Staging is opt-in and does not disable or replace the existing Supabase/Pusher transport. Do not enable it until a staging Supabase project has the migration applied and each test device has its own provisioned token.
 
-Still required before production: apply the SQL migration and deploy the Edge Function to a dedicated staging Supabase project; provision at least two separate device tokens; run physical two-device tests including offline/retry, duplicate delivery, simultaneous edits, queue-full behavior, and app restart; then perform a soak test. No production migration, Edge Function deployment, or production credential provisioning has been performed.
+Still required before production: deploy the Edge Function to the isolated staging project; provision at least two separate device tokens; run physical two-device tests including offline/retry, duplicate delivery, simultaneous edits, queue-full behavior, late-commit ordering, and app restart; then perform a soak test. No production migration, Edge Function deployment, or production credential provisioning has been performed.
 
 
 ## Additional production gap
@@ -112,4 +112,4 @@ The native gateway JavaScript bridge is registered only in debuggable builds; re
 The Android outbox and inbox are bounded by both message count and total encrypted storage size (4 MiB per queue). Gateway GET pages are limited to 10 messages. If the inbox is full, the server continues returning the same unacknowledged page; the app must apply and locally acknowledge queued messages before the worker can continue.
 
 
-Each worker run is capped at 15 POSTs and five GET pages, with a 10-second connect timeout and 10-second read timeout per HTTP request. This leaves execution headroom below WorkManager's ten-minute worker limit, even when a run has to process its full bounded workload.
+Each worker run is capped at 15 outbound messages and one inbound pending page, with a 10-second connect timeout and 10-second read timeout per HTTP request. This leaves execution headroom below WorkManager's ten-minute worker limit.

@@ -60,7 +60,7 @@ checks = {
     "Android gateway storage uses AES-GCM authenticated encryption": '"AES/GCM/NoPadding"' in SECURE and "GCMParameterSpec(128, iv)" in SECURE,
     "secure storage persists only encrypted Base64 values": "Base64.encodeToString(packed, Base64.NO_WRAP)" in SECURE and 'putString(name, value)' not in SECURE,
     "AES-GCM ciphertext is bound to each preference key": SECURE.count("cipher.updateAAD(name.toByteArray(Charsets.UTF_8))") == 2,
-    "gateway tokens are restricted to HTTPS Supabase hosts": 'host.endsWith(".supabase.co")' in WORKER and 'uri.scheme == "https"' in WORKER,
+    "gateway endpoint is pinned to canonical Supabase HTTPS path and port": 'host.endsWith(".supabase.co")' in WORKER and 'uri.scheme == "https"' in WORKER and 'uri.path == "/functions/v1/argentas-sync-gateway"' in WORKER and 'uri.port == -1 || uri.port == 443' in WORKER,
     "gateway bearer tokens are high-entropy format checked": 'Regex("[A-Za-z0-9_-]{32,256}")' in WORKER,
     "outbox is persisted before scheduling network work": 'writeArray(context, OUTBOX, queue)' in WORKER and 'enqueueUniqueWork(' in WORKER,
     "outbox is idempotent by delivery ID": 'optString("deliveryId") == deliveryId' in WORKER,

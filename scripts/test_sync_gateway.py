@@ -57,6 +57,7 @@ checks = {
     "WorkManager has connected-network constraints": "NetworkType.CONNECTED" in WORKER and "PeriodicWorkRequestBuilder" in WORKER,
     "native bridge exposes gateway queue without exposing token getter": "enqueueGatewayMessage" in ACTIVITY and "gatewayInbox" in ACTIVITY and "fun getGatewayToken" not in ACTIVITY,
     "native bridge exposes configuration and ACK methods": "configureGateway" in ACTIVITY and "acknowledgeGatewayInbox" in ACTIVITY,
+    "WebView blocks untrusted frames from JavaScript bridge": "if (!request.isForMainFrame) return true" in ACTIVITY and 'uri.path?.startsWith("/android_asset/") == true' in ACTIVITY,
     "foreground polling stops when Activity pauses": "gatewayPollHandler.postDelayed(gatewayPoll, 15_000)" in ACTIVITY and "gatewayPollHandler.removeCallbacks(gatewayPoll)" in ACTIVITY,
     "foreground polling does not cancel active worker": "ExistingWorkPolicy.KEEP" in WORKER,
     "WorkManager dependency is installed": 'androidx.work:work-runtime-ktx:2.10.0' in GRADLE,

@@ -43,16 +43,18 @@ Deno.serve(async (req: Request) => {
   if (deviceError || !device) return reply(401, { error: "unauthorized" });
 
   if (req.method === "POST") {
+    const contentLength = Number(req.headers.get("Content-Length") || 0);
+    if (contentLength > 256_000) return reply(413, { error: "payload_too_large" });
+    let rawBody: string;
+    try { rawBody = await req.text(); } catch { return reply(400, { error: "invalid_json" }); }
+    if (new TextEncoder().encode(rawBody).byteLength > 256_000) return reply(413, { error: "payload_too_large" });
     let body: any;
-    try { body = await req.json(); } catch { return reply(400, { error: "invalid_json" }); }
+    try { body = JSON.parse(rawBody); } catch { return reply(400, { error: "invalid_json" }); }
     const deliveryId = String(body?.deliveryId || "");
     const payload = body?.payload;
     if (!deliveryId || deliveryId.length > 200 || !payload || typeof payload !== "object" || Array.isArray(payload)) {
       return reply(400, { error: "invalid_message" });
     }
-    const encoded = JSON.stringify(payload);
-    if (encoded.length > 256_000) return reply(413, { error: "payload_too_large" });
-
     const { data, error } = await db.from("argentas_sync_messages")
       .insert({ sender_device_id: device.device_id, delivery_id: deliveryId, payload })
       .select("id")
@@ -62,16 +64,29 @@ Deno.serve(async (req: Request) => {
     return reply(201, { ok: true, duplicate: false, id: data?.id, deliveryId });
   }
 
-  const after = new URL(req.url).searchParams.get("after") || new Date(Date.now() - 7 * 86400000).toISOString();
-  const limitRaw = Number(new URL(req.url).searchParams.get("limit") || 200);
+  const params = new URL(req.url).searchParams;
+  const after = params.get("after") || new Date(Date.now() - 7 * 86400000).toISOString();
+  const afterIdRaw = params.get("after_id") || "0";
+  const afterId = Number(afterIdRaw);
+  const limitRaw = Number(params.get("limit") || 200);
   const limit = Number.isFinite(limitRaw) ? Math.min(500, Math.max(1, Math.floor(limitRaw))) : 200;
   if (Number.isNaN(Date.parse(after))) return reply(400, { error: "invalid_after" });
+  if (!/^\\d+$/.test(afterIdRaw) || !Number.isSafeInteger(afterId) || afterId < 0) {
+    return reply(400, { error: "invalid_after_id" });
+  }
+  // Composite cursor prevents losing rows that share the same created_at timestamp.
   const { data, error } = await db.from("argentas_sync_messages")
     .select("id,sender_device_id,delivery_id,payload,created_at")
     .neq("sender_device_id", device.device_id)
-    .gt("created_at", after)
+    .or(`created_at.gt.${after},and(created_at.eq.${after},id.gt.${afterId})`)
     .order("created_at", { ascending: true })
+    .order("id", { ascending: true })
     .limit(limit);
   if (error) return reply(500, { error: "read_failed" });
-  return reply(200, { messages: data || [] });
+  const messages = data || [];
+  const last = messages.length ? messages[messages.length - 1] : null;
+  return reply(200, {
+    messages,
+    nextCursor: last ? { after: last.created_at, after_id: last.id } : null,
+  });
 });

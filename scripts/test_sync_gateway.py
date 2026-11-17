@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Static contract checks for the staged Argentas sync gateway."""
 from pathlib import Path
+import hashlib
 import re
+import subprocess
+import sys
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 SQL = (ROOT / "supabase/migrations/20261117000100_argentas_sync_gateway.sql").read_text()
@@ -62,6 +66,34 @@ checks = {
     "untrusted WebView frames blocked": "if (!request.isForMainFrame) return true" in ACTIVITY,
     "rollout warns no production deployment": "No production migration or Edge Function deployment has been performed." in GUIDE,
 }
+
+# Exercise the one-time provisioner in a disposable directory. The secret must
+# be written only to a private token file and never printed to stdout.
+provisioner = ROOT / "scripts/provision_sync_device.py"
+with tempfile.TemporaryDirectory() as tmp:
+    result = subprocess.run(
+        [sys.executable, str(provisioner), "--device-id", "tablet-test-01", "--label", "tablet test", "--out-dir", tmp],
+        check=False, capture_output=True, text=True,
+    )
+    token_file = Path(tmp) / "tablet-test-01.token"
+    sql_file = Path(tmp) / "tablet-test-01.sql"
+    token = token_file.read_text().strip() if token_file.exists() else ""
+    sql = sql_file.read_text() if sql_file.exists() else ""
+    checks["provisioner creates a 256-bit random-format token privately"] = (
+        result.returncode == 0 and re.fullmatch(r"[A-Za-z0-9_-]{43}", token) is not None
+        and token not in result.stdout and token not in result.stderr
+    )
+    checks["provisioner writes only token hash to SQL"] = (
+        result.returncode == 0 and hashlib.sha256(token.encode()).hexdigest() in sql
+        and token not in sql
+    )
+    checks["provisioner refuses to overwrite existing credentials"] = (
+        subprocess.run(
+            [sys.executable, str(provisioner), "--device-id", "tablet-test-01", "--label", "tablet test", "--out-dir", tmp],
+            check=False, capture_output=True, text=True,
+        ).returncode != 0
+    )
+
 failed = [name for name, ok in checks.items() if not ok]
 for name, ok in checks.items():
     print(("PASS " if ok else "FAIL ") + name)

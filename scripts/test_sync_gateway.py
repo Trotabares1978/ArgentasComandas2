@@ -7,6 +7,13 @@ ROOT = Path(__file__).resolve().parents[1]
 SQL = (ROOT / "database/migrations/20261117000100_argentas_sync_gateway.sql").read_text()
 EDGE = (ROOT / "supabase/functions/argentas-sync-gateway/index.ts").read_text()
 GUIDE = (ROOT / "docs/SYNC_GATEWAY_ROLLOUT.md").read_text()
+SECURE = (ROOT / "app/src/main/java/com/trotabares/argentascomandas/GatewaySecureStore.kt").read_text()
+WORKER = (ROOT / "app/src/main/java/com/trotabares/argentascomandas/ArgentasGatewayWorker.kt").read_text()
+ACTIVITY = (ROOT / "app/src/main/java/com/trotabares/argentascomandas/MainActivity.kt").read_text()
+GRADLE = (ROOT / "app/build.gradle.kts").read_text()
+MANIFEST = (ROOT / "app/src/main/AndroidManifest.xml").read_text()
+BACKUP = (ROOT / "app/src/main/res/xml/backup_rules.xml").read_text()
+EXTRACTION = (ROOT / "app/src/main/res/xml/data_extraction_rules.xml").read_text()
 
 checks = {
     "device token hash stored, not raw token": "token_hash text not null unique" in SQL,
@@ -36,6 +43,22 @@ checks = {
     "composite cursor index exists": "(created_at asc, id asc)" in SQL,
     "rollback and rollout documented": "Rollback" in GUIDE and "gateway HTTP client" in GUIDE and "Android Keystore" in GUIDE,
     "no production migration claimed": "has NOT been deployed to Supabase production" in GUIDE,
+    "Android gateway storage uses Android Keystore": '"AndroidKeyStore"' in SECURE and "KeyGenParameterSpec" in SECURE,
+    "Android gateway storage uses AES-GCM authenticated encryption": '"AES/GCM/NoPadding"' in SECURE and "GCMParameterSpec(128, iv)" in SECURE,
+    "secure storage persists only encrypted Base64 values": "Base64.encodeToString(packed, Base64.NO_WRAP)" in SECURE and 'putString(name, value)' not in SECURE,
+    "gateway tokens are restricted to HTTPS Supabase hosts": 'host.endsWith(".supabase.co")' in WORKER and 'uri.scheme == "https"' in WORKER,
+    "gateway bearer tokens are high-entropy format checked": 'Regex("[A-Za-z0-9_-]{32,256}")' in WORKER,
+    "outbox is persisted before scheduling network work": 'writeArray(context, OUTBOX, queue)' in WORKER and 'enqueueUniqueWork(' in WORKER,
+    "outbox is idempotent by delivery ID": 'optString("deliveryId") == deliveryId' in WORKER,
+    "inbox page capacity is checked before persistence": "old.length() + additions.size > MAX_QUEUE" in WORKER,
+    "inbox is persisted before cursor advances": WORKER.index("addInboxPage(applicationContext, messages)") < WORKER.index("saveCursor(applicationContext, next)"),
+    "gateway GET cursor values are URL encoded": 'URLEncoder.encode(cursor.optString("after"), "UTF-8")' in WORKER,
+    "gateway redirects are disabled to protect bearer token": "instanceFollowRedirects = false" in WORKER,
+    "WorkManager has connected-network constraints": "NetworkType.CONNECTED" in WORKER and "PeriodicWorkRequestBuilder" in WORKER,
+    "native bridge exposes gateway queue without exposing token getter": "enqueueGatewayMessage" in ACTIVITY and "gatewayInbox" in ACTIVITY and "fun getGatewayToken" not in ACTIVITY,
+    "native bridge exposes configuration and ACK methods": "configureGateway" in ACTIVITY and "acknowledgeGatewayInbox" in ACTIVITY,
+    "WorkManager dependency is installed": 'androidx.work:work-runtime-ktx:2.10.0' in GRADLE,
+    "Android backup excludes Keystore-bound preferences": 'android:fullBackupContent="@xml/backup_rules"' in MANIFEST and 'android:dataExtractionRules="@xml/data_extraction_rules"' in MANIFEST and "argentas_gateway_secure_v1.xml" in BACKUP and "argentas_gateway_secure_v1.xml" in EXTRACTION,
 }
 # Compile and exercise the exact JavaScript regex with Python's compatible subset.
 match = re.search(r"const isoCursor = /(.*?)/;", EDGE)

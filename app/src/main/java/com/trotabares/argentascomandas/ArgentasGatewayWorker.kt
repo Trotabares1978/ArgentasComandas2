@@ -177,9 +177,9 @@ class ArgentasGatewayWorker(context: Context, params: WorkerParameters) : Worker
     }
 
     override fun doWork(): Result {
-        val endpoint = ArgentasGatewayQueue.endpoint(applicationContext) ?: return Result.success()
-        val token = ArgentasGatewayQueue.token(applicationContext) ?: return Result.success()
         return try {
+            val endpoint = ArgentasGatewayQueue.endpoint(applicationContext) ?: return Result.success()
+            val token = ArgentasGatewayQueue.token(applicationContext) ?: return Result.success()
             val outgoing = ArgentasGatewayQueue.outbox(applicationContext)
             for (i in 0 until minOf(outgoing.length(), MAX_POSTS_PER_RUN)) {
                 val item = outgoing.optJSONObject(i) ?: continue
@@ -231,8 +231,16 @@ class ArgentasGatewayWorker(context: Context, params: WorkerParameters) : Worker
         }
             ArgentasGatewayQueue.markSuccess(applicationContext)
             Result.success()
+        } catch (_: IllegalStateException) {
+            // Keystore invalidation or authenticated-storage corruption requires
+            // explicit re-provisioning; retrying the same unreadable ciphertext cannot help.
+            Result.failure()
         } catch (e: Exception) {
-            ArgentasGatewayQueue.setError(applicationContext, e.message ?: "Error de sincronización")
+            try {
+                ArgentasGatewayQueue.setError(applicationContext, e.message ?: "Error de sincronización")
+            } catch (_: Exception) {
+                // Preserve WorkManager's retry result even if diagnostics cannot be persisted.
+            }
             Result.retry()
         }
     }

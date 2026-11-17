@@ -49,6 +49,9 @@ After the app persists a complete page in its encrypted local inbox, the existin
 The pending query is intentionally page-based: it keeps returning the oldest unacknowledged rows until the client applies and ACKs them, then the next page becomes visible. The worker fetches one page per run; the WebView applies it and schedules the next run through the ACK bridge. No automatic server-side message deletion is enabled. Retention and expiry/revocation policy remain a separate production gate. A simple age-based deletion is unsafe because it could remove messages needed by a device that was offline.
 
 ## Release sequence (required)
+
+The step-by-step two-device matrix, including offline/restart, ACK loss, late commits, revocation and queue-full cases, is in `docs/SYNC_GATEWAY_PHYSICAL_TEST_PLAN.md`.
+
 1. JavaScript adapter, staging-only dual-write, router handled-result, and ACK-after-apply behavior are implemented in the build pipeline.
 2. A debug-only provisioning panel is implemented. Provision one independent token per device in the staging registry; never put raw tokens in source, logs, screenshots, or chat.
 3. Build and inspect the audit APK; confirm the legacy transport still works and that the gateway remains inactive when not configured.

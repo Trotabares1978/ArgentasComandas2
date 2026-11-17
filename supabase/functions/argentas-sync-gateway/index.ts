@@ -116,7 +116,7 @@ Deno.serve(async (req: Request) => {
   const limit = Number.isFinite(limitRaw) ? Math.min(500, Math.max(1, Math.floor(limitRaw))) : 200;
   // The timestamp is interpolated into a PostgREST .or() filter: accept only
   // an ISO-8601 timestamp, never arbitrary filter syntax.
-  const isoCursor = /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/;
+  const isoCursor = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
   if (!isoCursor.test(after) || !Number.isFinite(Date.parse(after))) return reply(400, { error: "invalid_after" });
   if (!/^\d+$/.test(afterIdRaw) || !Number.isSafeInteger(afterId) || afterId < 0) {
     return reply(400, { error: "invalid_after_id" });

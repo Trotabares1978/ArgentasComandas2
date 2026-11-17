@@ -189,7 +189,7 @@ class ArgentasGatewayWorker(context: Context, params: WorkerParameters) : Worker
 
             // Persist each page in the inbox before advancing its cursor. A crash can
             // therefore cause duplicates, but never silently skip an unpersisted page.
-            repeat(5) {
+            for (page in 0 until 5) {
                 val cursor = ArgentasGatewayQueue.cursor(applicationContext)
                 val query = buildString {
                     append("$endpoint?")

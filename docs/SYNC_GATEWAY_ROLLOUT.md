@@ -11,13 +11,13 @@ This is a staged dual-write path. The native gateway adapter is integrated into 
 - Public/anonymous roles have no grants on the new tables.
 - `(sender_device_id, delivery_id)` is unique. Retrying the same delivery is acknowledged as a duplicate without creating another row.
 - A device can only read messages sent by other registered devices. The endpoint currently treats all active devices in this single Argentas project as one trusted installation group.
-- GET pagination uses a composite `(created_at, id)` cursor (`after` + `after_id`) so messages sharing the same timestamp are not skipped between pages. The response returns `nextCursor`; clients must persist both fields atomically.
+- GET currently uses a composite `(created_at, id)` cursor (`after` + `after_id`). This resolves ties for rows sharing a timestamp, but **it is not a lossless delivery guarantee under concurrent transactions**: PostgreSQL `now()` is the transaction start time, so a transaction that began earlier can commit after a later transaction. A client may advance its cursor past the later row and never see the late-committing earlier row. Treat cursor pagination as provisional only; do not approve production until recipient-level server ACKs and an unacked-message query replace cursor-only delivery.
 - POST enforces the 256 KB ceiling while streaming the request body (including chunked requests), before JSON parsing; it accepts only the exact `application/json` media type and rejects invalid UTF-8.
 - GET accepts only strict ISO-8601 cursor timestamps before building its PostgREST filter, preventing arbitrary filter syntax from entering the query.
 - GET limits delivery to currently active, non-revoked sender devices; revoking a sender stops its queued messages from being delivered to other devices.
 - Responses are not cached.
 - CORS is permissive for WebView compatibility; it is not an authentication control. The bearer token is the actual credential.
-- Per-device rate limiting, abuse throttling, message retention/cleanup, and a formal server-side ACK endpoint are not implemented yet; add operational limits before production exposure.
+- Per-device rate limiting and abuse throttling are not implemented yet. Server-side recipient ACKs and safe retention are also missing; these are release blockers, not optional polish.
 
 ## Verified state of the Android gateway foundation
 - The WebView still loads the canonical app assembled from `source/argentas-original-*.part`; the legacy Supabase/Pusher transport remains unchanged.
@@ -29,6 +29,17 @@ This is a staged dual-write path. The native gateway adapter is integrated into 
 - Gateway configuration accepts only HTTPS Supabase project hosts and validates the high-entropy device-token format. The token is never returned through the JavaScript bridge.
 - `scripts/integrate_sync_gateway.py` wraps the existing `ArgentasSupabaseTransport.send` for staging-only dual-write and routes inbox messages through `window.onSupabaseMessage`. The router now returns an explicit handled result; local inbox ACK occurs only when it returns true. No staging or production token is provisioned, and no gateway traffic is being sent.
 - The old Bluetooth controls remain nonfunctional in this revision; the new HTTP gateway is a separate staged path.
+
+
+## Critical delivery guarantee still missing
+
+The current `(created_at, id)` cursor is deterministic for equal timestamps but cannot guarantee commit-order completeness. PostgreSQL `now()` is fixed at transaction start; transaction A can start first, transaction B can start later and commit first, and A can commit after a device has advanced beyond B's timestamp. A then falls behind the saved cursor and can be skipped permanently. A larger overlap window only reduces the probability; it does not prove correctness.
+
+The production-safe direction is recipient-based delivery receipts: each authenticated device repeatedly asks the server for messages without a receipt for that recipient, persists a complete page locally, applies each message, and only then submits an idempotent server ACK. The server must return unacknowledged rows again until ACKed. Retention must wait for all eligible active recipients or an explicitly documented device-expiry/revocation policy. The local encrypted inbox remains the crash-recovery buffer. The current implementation does not yet provide this guarantee.
+
+## Supabase Data API exposure check
+
+The migration creates tables in `public` and the Edge Function accesses them through PostgREST. Supabase's 2026-10-30 Data API change means new tables are not automatically exposed by default. In the dedicated staging project, verify the `public` schema is included in the Data API exposed schemas before testing. Keep `anon` and `authenticated` grants revoked and RLS enabled; exposing the schema does not mean granting public table access. Do not use the existing `Manos Verdes Pedidos` project as Argentas staging.
 
 ## Release sequence (required)
 1. JavaScript adapter, staging-only dual-write, router handled-result, and ACK-after-apply behavior are implemented in the build pipeline.

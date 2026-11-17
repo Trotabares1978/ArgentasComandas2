@@ -73,6 +73,9 @@ checks = {
     "gateway GET cursor values are URL encoded": 'URLEncoder.encode(cursor.optString("after"), "UTF-8")' in WORKER,
     "gateway redirects are disabled to protect bearer token": "instanceFollowRedirects = false" in WORKER,
     "WorkManager has connected-network constraints": "NetworkType.CONNECTED" in WORKER and "PeriodicWorkRequestBuilder" in WORKER,
+    "worker catches secure-store failures before reading credentials": WORKER.index("return try {") < WORKER.index("ArgentasGatewayQueue.endpoint(applicationContext)"),
+    "invalidated Keystore storage fails cleanly instead of retry-looping": "catch (_: IllegalStateException)" in WORKER and "Result.failure()" in WORKER,
+
     "native bridge exposes gateway queue without exposing token getter": "enqueueGatewayMessage" in ACTIVITY and "gatewayInbox" in ACTIVITY and "fun getGatewayToken" not in ACTIVITY,
     "native bridge exposes configuration and ACK methods": "configureGateway" in ACTIVITY and "acknowledgeGatewayInbox" in ACTIVITY,
     "gateway credential provisioning is debug-build-only": "fun isDebugBuild()" in ACTIVITY and "if (!isDebugBuild()) return false" in ACTIVITY,

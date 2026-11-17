@@ -31,7 +31,7 @@ This is a staged dual-write path. The native gateway adapter is integrated into 
 - The old Bluetooth controls remain nonfunctional in this revision; the new HTTP gateway is a separate staged path.
 
 
-## Critical delivery guarantee still missing
+## Critical delivery guarantee addressed in staging
 
 The previous `(created_at, id)` cursor design was removed because it could not guarantee commit-order completeness: PostgreSQL `now()` is fixed at transaction start, so a late-committing transaction could fall behind an already-advanced cursor. The current recipient-receipt implementation addresses that delivery gap by repeatedly selecting unacknowledged messages. Physical-device replay and crash tests remain required.
 
@@ -46,7 +46,7 @@ The gateway no longer relies on a timestamp cursor. Every GET asks the database 
 
 After the app persists a complete page in its encrypted local inbox, the existing router applies each message. Only a successful router result is locally acknowledged. The Android bridge first persists the message IDs in a separate encrypted server-ACK queue, then removes them from the local inbox. WorkManager sends those receipt IDs to the gateway; the database inserts one receipt per (message, recipient) idempotently. Only after the server confirms the receipt does the worker remove it from the local ACK queue. This ordering tolerates process death and network retries without silently dropping an ACK.
 
-The pending query is intentionally page-based: it keeps returning the oldest unacknowledged rows until the client applies and ACKs them, then the next page becomes visible. The worker fetches one page per run; the WebView applies it and schedules the next run through the ACK bridge. No automatic server-side message deletion is enabled. Retention and expiry/revocation policy remain a separate production gate. A simple age-based deletion is unsafe because it could remove messages needed by a device that was offline. A simple age-based deletion is unsafe because it could remove messages needed by a device that was offline.
+The pending query is intentionally page-based: it keeps returning the oldest unacknowledged rows until the client applies and ACKs them, then the next page becomes visible. The worker fetches one page per run; the WebView applies it and schedules the next run through the ACK bridge. No automatic server-side message deletion is enabled. Retention and expiry/revocation policy remain a separate production gate. A simple age-based deletion is unsafe because it could remove messages needed by a device that was offline.
 
 ## Release sequence (required)
 1. JavaScript adapter, staging-only dual-write, router handled-result, and ACK-after-apply behavior are implemented in the build pipeline.

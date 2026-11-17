@@ -50,6 +50,7 @@ checks = {
     "outbox batch bounded": "const val MAX_POSTS_PER_RUN = 15" in WORKER,
     "outbox continuation retained": "scheduleContinuation(applicationContext)" in WORKER and "ExistingWorkPolicy.APPEND_OR_REPLACE" in WORKER,
     "remote ACK queue is persisted before local inbox removal": WORKER.index("writeArray(context, SERVER_ACKS, newAcks)") < WORKER.index("writeArray(context, INBOX, kept)"),
+    "native ACK only accepts IDs already persisted in local inbox": "if (present.contains(id)) acknowledged.add(id)" in WORKER,
     "worker sends remote ACKs before fetching next pending page": WORKER.index('put("action", "ack")') < WORKER.index('request("$endpoint?limit=10", token, "GET", null)'),
     "worker fetches without unsafe timestamp cursor": 'request("$endpoint?limit=10", token, "GET", null)' in WORKER and "saveCursor" not in WORKER,
     "inbox is persisted before app router sees it": "addInboxPage(applicationContext, messages)" in WORKER,

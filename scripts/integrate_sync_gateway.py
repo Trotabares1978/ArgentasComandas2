@@ -220,10 +220,11 @@ adapter = r"""
     if(!debugBuild()||document.getElementById("argentas-gateway-debug"))return;
     var panel=document.createElement("details");
     panel.id="argentas-gateway-debug";
+    panel.open=true;
     panel.style.cssText="position:fixed;right:10px;bottom:10px;z-index:99999;width:min(360px,calc(100vw - 20px));padding:10px;background:#171717;color:#fff;border:1px solid #b88b32;border-radius:12px;font:13px system-ui;box-shadow:0 5px 24px #0009";
     panel.innerHTML=
-      '<summary style="cursor:pointer;font-weight:800;color:#e8b84a">Gateway · staging (debug)</summary>'+
-      '<p style="font-size:11px;color:#bbb">Pruebas únicamente. El token se cifra en Android Keystore y no se guarda en el almacenamiento web.</p>'+
+      '<summary style="cursor:pointer;font-weight:800;color:#e8b84a">Configuración de sincronización</summary>'+
+      '<p style="font-size:11px;color:#bbb">Configuración avanzada del dispositivo. El token se cifra en Android Keystore y no se guarda en el almacenamiento web.</p>'+
       '<input id="arg-gateway-endpoint" type="url" autocomplete="off" placeholder="https://PROYECTO.supabase.co/functions/v1/argentas-sync-gateway" style="width:100%;padding:8px;margin:4px 0;background:#090909;color:#fff;border:1px solid #555;border-radius:7px">'+
       '<input id="arg-gateway-token" type="password" autocomplete="new-password" placeholder="Token individual del dispositivo" style="width:100%;padding:8px;margin:4px 0;background:#090909;color:#fff;border:1px solid #555;border-radius:7px">'+
       '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:7px"><button id="arg-gateway-save" type="button">Guardar</button><button id="arg-gateway-on" type="button">Activar</button><button id="arg-gateway-off" type="button">Desactivar</button></div>'+
@@ -254,8 +255,26 @@ adapter = r"""
     refresh();setInterval(refresh,5000);
   }
 
-  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",addDebugPanel,{once:true});
-  else addDebugPanel();
+  // The gateway controls stay out of the normal interface. Reveal them only
+  // after seven quick taps on the ARGENTAS brand/header in a debug build.
+  function installDebugShortcut(){
+    if(!debugBuild())return;
+    var candidates=Array.prototype.slice.call(document.querySelectorAll("h1,h2,header,[class*='brand'],[id*='brand']"));
+    var target=candidates.find(function(el){return /ARGENTAS/i.test(el.textContent||"")});
+    if(!target)return false;
+    var taps=0,timer=null;
+    target.addEventListener("click",function(){
+      taps++;
+      clearTimeout(timer);
+      timer=setTimeout(function(){taps=0},3000);
+      if(taps>=7){taps=0;clearTimeout(timer);addDebugPanel()}
+    });
+    return true;
+  }
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",installDebugShortcut,{once:true});
+  else if(!installDebugShortcut()){
+    var tries=0,wait=setInterval(function(){if(installDebugShortcut()||++tries>=30)clearInterval(wait)},500);
+  }
   var attempts=0;
   var hookTimer=setInterval(function(){
     attempts++;

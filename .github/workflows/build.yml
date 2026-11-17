@@ -56,6 +56,9 @@ jobs:
       - name: Fix comanda status ACK and retry queue
         run: python3 scripts/fix_comanda_status_queue.py
 
+      - name: Handle asynchronous snapshot delivery failures
+        run: python3 scripts/fix_state_sync_async_errors.py
+
       - name: Prepare icon
         run: |
           sudo apt-get update -qq

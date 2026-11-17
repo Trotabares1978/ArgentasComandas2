@@ -63,10 +63,13 @@ internal object ArgentasGatewayQueue {
 
     fun acknowledgeInbox(context: Context, idsJson: String): Boolean = synchronized(lock) {
         val ids = try { JSONArray(idsJson) } catch (_: Exception) { return false }
+        val old = readArray(context, INBOX)
+        val present = HashSet<String>()
+        for (i in 0 until old.length()) old.optJSONObject(i)?.optString("id")?.let { present.add(it) }
         val acknowledged = HashSet<String>()
         for (i in 0 until ids.length()) {
             val id = ids.opt(i)?.toString()?.takeIf { it.matches(Regex("\\d+")) && it != "0" } ?: continue
-            acknowledged.add(id)
+            if (present.contains(id)) acknowledged.add(id)
         }
         if (acknowledged.isEmpty()) return true
         val oldAcks = readArray(context, SERVER_ACKS)
@@ -78,7 +81,6 @@ internal object ArgentasGatewayQueue {
         // Persist the remote receipt queue BEFORE removing local inbox rows.
         // A crash can cause a harmless duplicate, never a lost server ACK.
         writeArray(context, SERVER_ACKS, newAcks)
-        val old = readArray(context, INBOX)
         val kept = JSONArray()
         for (i in 0 until old.length()) {
             val item = old.optJSONObject(i) ?: continue

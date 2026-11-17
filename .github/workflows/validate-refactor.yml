@@ -2,7 +2,7 @@ name: Validate Argentas refactor
 
 on:
   push:
-    branches: [refactor-sync-engine-safe]
+    branches: [refactor-sync-engine-safe, audit/sync-gateway-final-ci]
   pull_request:
     branches: [main]
 

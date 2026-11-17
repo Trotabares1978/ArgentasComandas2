@@ -19,12 +19,12 @@ ASSET = (ROOT / "app/src/main/assets/index.html").read_text(encoding="utf-8")
 
 checks = {
     "gateway adapter is injected into packaged HTML": 'id="argentas-gateway-adapter"' in ASSET,
-    "gateway sends snapshots alongside legacy Bluetooth": "ArgentasGatewayTransport.sendState(db)" in ASSET and "ArgentasNativeBluetooth.send" in ASSET,
+    "gateway dual-writes the existing Supabase transport": "var original=transport.send" in ASSET and "return original.apply(this,arguments)" in ASSET,
     "gateway staging is opt-in and debug-only": "argentas_gateway_staging_enabled" in ASSET and "isDebugBuild" in ASSET,
-    "gateway inbox ACK follows successful state application": "if(applyPayload(payload))ack.push(String(row.id))" in ASSET,
-    "gateway applies only validated state snapshots": 'payload.type!=="state"' in ASSET and "Array.isArray(payload.db.orders)" in ASSET,
+    "gateway inbox ACK requires successful existing router handling": "window.onSupabaseMessage(JSON.stringify(payload))===true" in ASSET,
+    "gateway skips ephemeral hello messages": 'message.type==="hello"||message.type==="hello-ack"' in ASSET,
     "gateway credentials are not stored in web storage": "localStorage.setItem(ENABLE_KEY" in ASSET and "localStorage.setItem(\"device_token\"" not in ASSET and "localStorage.setItem(\"argentas_gateway_token\"" not in ASSET,
-    "gateway message size is bounded before enqueue": "new TextEncoder().encode(json).length>240000" in ASSET,
+    "gateway message size is bounded before enqueue": "new TextEncoder().encode(payloadJson).length>240000" in ASSET,
     "device token hash stored, not raw token": "token_hash text not null unique" in SQL,
     "device registry RLS enabled": "alter table public.argentas_sync_devices enable row level security" in SQL,
     "messages RLS enabled": "alter table public.argentas_sync_messages enable row level security" in SQL,

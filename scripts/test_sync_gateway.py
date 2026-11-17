@@ -23,7 +23,7 @@ checks = {
     "router marks unsupported messages unhandled": "}else{handled=false}" in ASSET,
     "router marks parse/apply exceptions unhandled": "catch(e){handled=false;console.warn('Mensaje de sincronización inválido',e)}" in ASSET,
     "router keeps VENDER cancellation pending until its draft exists": "else{handled=false}" in ASSET and "sendVenderAck(m.deliveryId||('vender-cancel-draft:'" in ASSET,
-    "router does not ACK comanda status before its order exists": "if(!remoteOrder||!validStatus){handled=false}" in ASSET and "validStatus=incomingTs>0" in ASSET,
+    "router does not ACK comanda status before its order exists": "if(!remoteOrder){handled=false;return}" in ASSET and "Number(m.statusUpdatedAt)>0" in ASSET and "m.status==='oculta'" in ASSET,
     "router does not ACK malformed state payloads": "if(!m.db||typeof m.db!=='object'||!m.sessionId){handled=false;return}" in ASSET and "if(!sid||!sentAt){handled=false;return}" in ASSET,
     "gateway uses stable delivery identifiers": "if(message.deliveryId)return String(message.deliveryId)" in ASSET and "if(message.msgId)return" in ASSET,
     "gateway dual-writes the existing Supabase transport": "var original=transport.send" in ASSET and "return original.apply(this,arguments)" in ASSET,

@@ -63,6 +63,9 @@ jobs:
       - name: Handle asynchronous snapshot delivery failures
         run: python3 scripts/fix_state_sync_async_errors.py
 
+      - name: Integrate staging-only native sync gateway
+        run: python3 scripts/integrate_sync_gateway.py
+
       - name: Run multi-device synchronization integrity checks
         run: python3 scripts/test_sync_integrity.py
 

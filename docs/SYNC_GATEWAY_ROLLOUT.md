@@ -76,6 +76,16 @@ set active = false, revoked_at = now()
 where device_id = '<device-id>';
 ```
 
+## Local device credential generator
+
+Use the helper on a trusted administrator workstation to create one independent token per physical device. It writes the raw token to a private `.token` file and a separate SQL file containing only the SHA-256 hash; the secret is never printed to the terminal. Output files are created with owner-only permissions where supported, and the helper refuses to overwrite existing credentials.
+
+```bash
+python3 scripts/provision_sync_device.py --device-id tablet-caja-01 --label "Tablet caja"
+python3 scripts/provision_sync_device.py --device-id telefono-caja-01 --label "Telefono caja"
+```
+
+Execute each generated `.sql` file only in ARGENTAS-Staging. Transfer each `.token` file directly to its corresponding device and enter it in that device's debug-only staging panel. Keep the token files out of Git, cloud-synced folders, screenshots, chat, and support logs. Revoke the device row if a token is lost or exposed.
 ## Rollback
 Do not drop the new tables during rollback. Revert Android clients to the legacy transport, disable the Edge Function, and leave the new schema/data intact for diagnosis. Do not alter or purge `argentas_conexion` during the rollout.
 

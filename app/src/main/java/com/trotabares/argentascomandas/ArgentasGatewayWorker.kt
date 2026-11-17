@@ -23,6 +23,7 @@ internal object ArgentasGatewayQueue {
     private const val INBOX = "inbox_v1"
     private const val CURSOR = "cursor_v1"
     private const val MAX_QUEUE = 500
+    private const val MAX_QUEUE_BYTES = 4 * 1024 * 1024
     private val lock = Any()
 
     fun configure(context: Context, endpoint: String, token: String) = synchronized(lock) {
@@ -49,6 +50,10 @@ internal object ArgentasGatewayQueue {
             return false
         }
         queue.put(JSONObject().put("deliveryId", deliveryId).put("payload", payload).put("queuedAt", System.currentTimeMillis()))
+        if (queue.toString().toByteArray(Charsets.UTF_8).size > MAX_QUEUE_BYTES) {
+            GatewaySecureStore.put(context, "last_error", "La cola de envíos alcanzó el límite de almacenamiento; no se descartaron mensajes")
+            return false
+        }
         writeArray(context, OUTBOX, queue)
         true
     }
@@ -143,6 +148,7 @@ internal object ArgentasGatewayQueue {
         val merged = JSONArray()
         for (i in 0 until old.length()) old.optJSONObject(i)?.let { merged.put(it) }
         additions.forEach { merged.put(it) }
+        if (merged.toString().toByteArray(Charsets.UTF_8).size > MAX_QUEUE_BYTES) return false
         writeArray(context, INBOX, merged)
         true
     }
@@ -198,7 +204,8 @@ class ArgentasGatewayWorker(context: Context, params: WorkerParameters) : Worker
                 val cursor = ArgentasGatewayQueue.cursor(applicationContext)
                 val query = buildString {
                     append("$endpoint?")
-                    append("limit=100")
+                    // Keep a worst-case page comfortably below the encrypted inbox byte ceiling.
+                    append("limit=10")
                     if (cursor != null) {
                         append("&after=").append(URLEncoder.encode(cursor.optString("after"), "UTF-8"))
                         append("&after_id=").append(URLEncoder.encode(cursor.optString("after_id", "0"), "UTF-8"))

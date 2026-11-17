@@ -12,7 +12,12 @@ This is a staged replacement path. It is deliberately NOT wired into the current
 - `(sender_device_id, delivery_id)` is unique. Retrying the same delivery is acknowledged as a duplicate without creating another row.
 - A device can only read messages sent by other registered devices. The endpoint currently treats all active devices in this single Argentas project as one trusted installation group.
 - GET pagination uses a composite `(created_at, id)` cursor (`after` + `after_id`) so messages sharing the same timestamp are not skipped between pages. The response returns `nextCursor`; clients must persist both fields atomically.
-- POST rejects oversized request bodies before parsing JSON, requires JSON content type, validates bearer-token format, and does not cache responses.\n- CORS is permissive for WebView compatibility; it is not an authentication control. The bearer token is the actual credential.\n- Per-device rate limiting, abuse throttling, message retention/cleanup, and a formal server-side ACK endpoint are not implemented yet; add operational limits before production exposure.
+- POST enforces the 256 KB ceiling while streaming the request body (including chunked requests), before JSON parsing; it accepts only the exact `application/json` media type and rejects invalid UTF-8.
+- GET accepts only strict ISO-8601 cursor timestamps before building its PostgREST filter, preventing arbitrary filter syntax from entering the query.
+- GET limits delivery to currently active, non-revoked sender devices; revoking a sender stops its queued messages from being delivered to other devices.
+- Responses are not cached.
+- CORS is permissive for WebView compatibility; it is not an authentication control. The bearer token is the actual credential.
+- Per-device rate limiting, abuse throttling, message retention/cleanup, and a formal server-side ACK endpoint are not implemented yet; add operational limits before production exposure.
 
 ## Verified state of the current Android app
 - The WebView loads `app/src/main/assets/index.html` and exposes a JavaScript object named `ArgentasNativeBluetooth`.

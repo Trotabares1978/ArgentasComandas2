@@ -50,6 +50,9 @@ jobs:
       - name: Harden VENDER delivery retries and ACK handling
         run: python3 scripts/fix_vender_delivery_retry.py
 
+      - name: Prevent self-ACK during Supabase history recovery
+        run: python3 scripts/fix_supabase_recovery_origin.py
+
       - name: Prepare icon
         run: |
           sudo apt-get update -qq

@@ -38,11 +38,74 @@ class MainActivity : AppCompatActivity() {
         webView.webViewClient = WebViewClient()
         webView.webChromeClient = WebChromeClient()
         webView.addJavascriptInterface(NativeBridge(), "ArgentasNativeBluetooth")
+        webView.addJavascriptInterface(NativeBridge(), "ArgentasNativeGateway")
+        ArgentasGatewayQueue.schedulePeriodic(this)
         setContentView(webView)
         webView.loadUrl("file:///android_asset/index.html")
     }
 
+    override fun onResume() {
+        super.onResume()
+        ArgentasGatewayQueue.schedule(this)
+    }
+
     inner class NativeBridge {
+        @JavascriptInterface
+        fun configureGateway(endpoint: String, token: String): Boolean {
+            return try {
+                ArgentasGatewayQueue.configure(this@MainActivity, endpoint, token)
+                ArgentasGatewayQueue.schedule(this@MainActivity)
+                true
+            } catch (_: Exception) {
+                false
+            }
+        }
+
+        @JavascriptInterface
+        fun enqueueGatewayMessage(deliveryId: String, payloadJson: String): Boolean {
+            return try {
+                val accepted = ArgentasGatewayQueue.enqueue(this@MainActivity, deliveryId, payloadJson)
+                if (accepted) ArgentasGatewayQueue.schedule(this@MainActivity)
+                accepted
+            } catch (_: Exception) {
+                false
+            }
+        }
+
+        @JavascriptInterface
+        fun gatewayInbox(): String {
+            return try {
+                ArgentasGatewayQueue.inbox(this@MainActivity)
+            } catch (_: Exception) {
+                "[]"
+            }
+        }
+
+        @JavascriptInterface
+        fun acknowledgeGatewayInbox(idsJson: String): Boolean {
+            return try {
+                val accepted = ArgentasGatewayQueue.acknowledgeInbox(this@MainActivity, idsJson)
+                if (accepted) ArgentasGatewayQueue.schedule(this@MainActivity)
+                accepted
+            } catch (_: Exception) {
+                false
+            }
+        }
+
+        @JavascriptInterface
+        fun gatewayStatus(): String {
+            return try {
+                ArgentasGatewayQueue.status(this@MainActivity)
+            } catch (_: Exception) {
+                """{"configured":false,"error":"secure_storage_unavailable"}"""
+            }
+        }
+
+        @JavascriptInterface
+        fun syncGatewayNow() {
+            ArgentasGatewayQueue.schedule(this@MainActivity)
+        }
+
         @JavascriptInterface
         fun openExternalUrl(url: String) {
             val uri = try {

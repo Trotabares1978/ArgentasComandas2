@@ -13,11 +13,11 @@ This is a staged dual-write path. The native gateway adapter is integrated into 
 - A device can only read messages sent by other registered devices. The endpoint currently treats all active devices in this single Argentas project as one trusted installation group.
 - GET now uses recipient-specific pending delivery and durable server receipts; it does not rely on a timestamp cursor.
 - POST enforces the 256 KB ceiling while streaming the request body (including chunked requests), before JSON parsing; it accepts only the exact `application/json` media type and rejects invalid UTF-8.
-- GET accepts only strict ISO-8601 cursor timestamps before building its PostgREST filter, preventing arbitrary filter syntax from entering the query.
 - GET limits delivery to currently active, non-revoked sender devices; revoking a sender stops its queued messages from being delivered to other devices.
 - Responses are not cached.
 - CORS is permissive for WebView compatibility; it is not an authentication control. The bearer token is the actual credential. Supabase security advisor reports the three RLS-enabled gateway tables have no policies; this is intentional because direct client access is denied and only the service-role Edge Function uses them. Do not add broad policies merely to silence this informational finding.
-- Atomic per-device fixed-window throttling is enabled: at most 120 POST operations and 60 GET polls per minute; excess requests receive HTTP 429 with `Retry-After: 60`. The SQL counter update is atomic on the registered device row, so concurrent requests cannot bypass the cap.\n- Automated abuse detection beyond these request ceilings is not implemented. Safe retention/expiry is also missing and remains a release blocker.
+- Atomic per-device fixed-window throttling is enabled: at most 120 POST operations and 60 GET polls per minute; excess requests receive HTTP 429 with `Retry-After: 60`. The SQL counter update is atomic on the registered device row, so concurrent requests cannot bypass the cap.
+- Automated abuse detection beyond these request ceilings is not implemented. Safe retention/expiry is also missing and remains a release blocker.
 
 ## Verified state of the Android gateway foundation
 - The WebView still loads the canonical app assembled from `source/argentas-original-*.part`; the legacy Supabase/Pusher transport remains unchanged.
@@ -33,9 +33,7 @@ This is a staged dual-write path. The native gateway adapter is integrated into 
 
 ## Critical delivery guarantee still missing
 
-The current `(created_at, id)` cursor is deterministic for equal timestamps but cannot guarantee commit-order completeness. PostgreSQL `now()` is fixed at transaction start; transaction A can start first, transaction B can start later and commit first, and A can commit after a device has advanced beyond B's timestamp. A then falls behind the saved cursor and can be skipped permanently. A larger overlap window only reduces the probability; it does not prove correctness.
-
-The production-safe direction is recipient-based delivery receipts: each authenticated device repeatedly asks the server for messages without a receipt for that recipient, persists a complete page locally, applies each message, and only then submits an idempotent server ACK. The server must return unacknowledged rows again until ACKed. Retention must wait for all eligible active recipients or an explicitly documented device-expiry/revocation policy. The local encrypted inbox remains the crash-recovery buffer. The current implementation does not yet provide this guarantee.
+The previous `(created_at, id)` cursor design was removed because it could not guarantee commit-order completeness: PostgreSQL `now()` is fixed at transaction start, so a late-committing transaction could fall behind an already-advanced cursor. The current recipient-receipt implementation addresses that delivery gap by repeatedly selecting unacknowledged messages. Physical-device replay and crash tests remain required.
 
 ## Supabase Data API exposure check
 
@@ -48,7 +46,7 @@ The gateway no longer relies on a timestamp cursor. Every GET asks the database 
 
 After the app persists a complete page in its encrypted local inbox, the existing router applies each message. Only a successful router result is locally acknowledged. The Android bridge first persists the message IDs in a separate encrypted server-ACK queue, then removes them from the local inbox. WorkManager sends those receipt IDs to the gateway; the database inserts one receipt per (message, recipient) idempotently. Only after the server confirms the receipt does the worker remove it from the local ACK queue. This ordering tolerates process death and network retries without silently dropping an ACK.
 
-The pending query is intentionally page-based: it keeps returning the oldest unacknowledged rows until the client applies and ACKs them, then the next page becomes visible. The worker fetches one page per run; the WebView applies it and schedules the next run through the ACK bridge. No automatic server-side message deletion is enabled. Retention and expiry/revocation policy remain a separate production gate. A simple age-based deletion is unsafe because it could remove messages needed by a device that was offline.
+The pending query is intentionally page-based: it keeps returning the oldest unacknowledged rows until the client applies and ACKs them, then the next page becomes visible. The worker fetches one page per run; the WebView applies it and schedules the next run through the ACK bridge. No automatic server-side message deletion is enabled. Retention and expiry/revocation policy remain a separate production gate. A simple age-based deletion is unsafe because it could remove messages needed by a device that was offline. A simple age-based deletion is unsafe because it could remove messages needed by a device that was offline.
 
 ## Release sequence (required)
 1. JavaScript adapter, staging-only dual-write, router handled-result, and ACK-after-apply behavior are implemented in the build pipeline.
@@ -83,7 +81,7 @@ Do not drop the new tables during rollback. Revert Android clients to the legacy
 
 ## Known remaining work
 - Add Android instrumentation tests for queue recovery, encryption failure, and WorkManager retry behavior; static contract tests and CI compilation are in place.
-- The dedicated `ARGENTAS-Staging` project is active, all four schema migrations are applied, and the Edge Function is deployed; no device tokens are provisioned yet.
+- The dedicated `ARGENTAS-Staging` project is active, all four schema migrations are applied, and Edge Function version 2 is deployed; no device tokens are provisioned yet. Rate-limit SQL verification passed: 120/121 writes and 60/61 reads were allowed/blocked as expected inside a rolled-back test transaction.
 - Add a staging environment and run real gateway integration tests before any production rollout.
 - Replace or repair the nonfunctional Bluetooth controls; do not advertise them as available until native methods exist and two physical devices pass testing.
 - A guided pairing flow is not implemented; current provisioning is an admin-operated staging step.

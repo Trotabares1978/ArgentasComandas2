@@ -131,13 +131,17 @@ internal object ArgentasGatewayQueue {
         if (old.length() >= MAX_QUEUE) return false
         val known = HashSet<String>()
         for (i in 0 until old.length()) known.add(old.optJSONObject(i)?.optString("id") ?: "")
-        val merged = JSONArray()
-        for (i in 0 until old.length()) old.optJSONObject(i)?.let { merged.put(it) }
+        val additions = ArrayList<JSONObject>()
         for (i in 0 until messages.length()) {
             val message = messages.optJSONObject(i) ?: continue
             val id = message.opt("id")?.toString() ?: continue
-            if (known.add(id) && merged.length() < MAX_QUEUE) merged.put(message)
+            if (known.add(id)) additions.add(message)
         }
+        // Never advance the cursor after persisting only part of a server page.
+        if (old.length() + additions.size > MAX_QUEUE) return false
+        val merged = JSONArray()
+        for (i in 0 until old.length()) old.optJSONObject(i)?.let { merged.put(it) }
+        additions.forEach { merged.put(it) }
         writeArray(context, INBOX, merged)
         true
     }
@@ -202,16 +206,16 @@ class ArgentasGatewayWorker(context: Context, params: WorkerParameters) : Worker
                 }
                 val body = JSONObject(response.body)
                 val messages = body.optJSONArray("messages") ?: JSONArray()
-                if (messages.length() == 0) return@repeat
+                if (messages.length() == 0) break
                 if (!ArgentasGatewayQueue.addInboxPage(applicationContext, messages)) {
                     ArgentasGatewayQueue.setError(applicationContext, "La bandeja de entrada está llena; se detuvo la descarga")
                     return Result.success()
                 }
-                val next = body.optJSONObject("nextCursor") ?: return@repeat
+                val next = body.optJSONObject("nextCursor") ?: break
                 val previous = cursor?.toString()
                 ArgentasGatewayQueue.saveCursor(applicationContext, next)
-                if (previous == next.toString()) return@repeat
-            }
+                if (previous == next.toString()) break
+        }
             ArgentasGatewayQueue.markSuccess(applicationContext)
             Result.success()
         } catch (e: Exception) {

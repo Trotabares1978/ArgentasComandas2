@@ -23,7 +23,7 @@ replace_once(
 )
 replace_once(
     "var qStatus=SUPABASE_URL+'/rest/v1/'+SUPABASE_TABLE+'?select=mensaje,created_at&order=created_at.desc&limit=500';",
-    "var qStatus=SUPABASE_URL+'/rest/v1/'+SUPABASE_TABLE+'?select=mensaje,created_at,device_id&or=(device_id.is.null,device_id.neq.'+encodeURIComponent(DEVICE_ID)+')&order=created_at.desc&limit=500';",
+    "var qStatus=SUPABASE_URL+'/rest/v1/'+SUPABASE_TABLE+'?select=mensaje,created_at,device_id&mensaje=like.*%22type%22%3A%22comanda-status%22*&or=(device_id.is.null,device_id.neq.'+encodeURIComponent(DEVICE_ID)+')&order=created_at.desc&limit=500';",
     "Exclude own device from status recovery query",
 )
 replace_once(
@@ -32,16 +32,16 @@ replace_once(
     "Defensively ignore own recovered state rows",
 )
 replace_once(
-    "statusRows.reverse().forEach(function(row){if(!row||!row.mensaje)return;",
+    "statusRows.reverse().forEach(function(row){if(!row||!row.mensaje||String(row.device_id||'')===DEVICE_ID)return;try{var parsed=JSON.parse(row.mensaje);if(parsed.type==='comanda-status'&&String(parsed.statusDeviceId||'')!==DEVICE_ID)message(row.mensaje)}catch(e){}",
     "statusRows.reverse().forEach(function(row){if(!row||!row.mensaje||String(row.device_id||'')===DEVICE_ID)return;",
     "Defensively ignore own recovered status rows",
 )
 
 checks = {
     "state recovery excludes current device": "device_id=neq.'+encodeURIComponent(DEVICE_ID)+'&mensaje=like.*%22type%22%3A%22state%22*" in html,
-    "status recovery excludes current device and retains legacy null sender rows": "select=mensaje,created_at,device_id&or=(device_id.is.null,device_id.neq.'+encodeURIComponent(DEVICE_ID)+')&order=created_at.desc&limit=500" in html,
+    "status recovery is type-filtered and retains legacy null sender rows": "select=mensaje,created_at,device_id&mensaje=like.*%22type%22%3A%22comanda-status%22*&or=(device_id.is.null,device_id.neq.'+encodeURIComponent(DEVICE_ID)+')&order=created_at.desc&limit=500" in html,
     "state rows have a client-side sender guard": "if(!row||!row.mensaje||String(row.device_id||'')===DEVICE_ID)return;" in html,
-    "status rows have a client-side sender guard": "statusRows.reverse().forEach(function(row){if(!row||!row.mensaje||String(row.device_id||'')===DEVICE_ID)return;" in html,
+    "status rows have a client-side row and payload sender guard": "String(parsed.statusDeviceId||'')!==DEVICE_ID" in html,
 }
 failed = [name for name, ok in checks.items() if not ok]
 if failed:

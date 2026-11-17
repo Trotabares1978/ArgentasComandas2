@@ -19,22 +19,26 @@ This is a staged replacement path. It is deliberately NOT wired into the current
 - CORS is permissive for WebView compatibility; it is not an authentication control. The bearer token is the actual credential.
 - Per-device rate limiting, abuse throttling, message retention/cleanup, and a formal server-side ACK endpoint are not implemented yet; add operational limits before production exposure.
 
-## Verified state of the current Android app
-- The WebView loads `app/src/main/assets/index.html` and exposes a JavaScript object named `ArgentasNativeBluetooth`.
-- The HTML calls native methods `startServer`, `refresh`, `connect`, and `send`. The current `MainActivity.kt` bridge exposes only `openExternalUrl` and `shareText`; those Bluetooth methods are absent. Therefore the visible Bluetooth controls are not a working device transport in this revision.
-- The current app has no gateway HTTP client, no per-device token enrollment, no Android Keystore token storage, and no durable gateway cursor/outbox. Do not use this branch as a two-device production build yet.
+## Verified state of the Android gateway foundation
+- The WebView still loads the canonical app assembled from `source/argentas-original-*.part`; the legacy Supabase/Pusher transport remains unchanged.
+- `MainActivity.kt` now exposes a separate `ArgentasNativeGateway` bridge. It does not replace or pretend to implement the legacy Bluetooth methods.
+- `GatewaySecureStore.kt` stores the endpoint, bearer token, outbox, inbox, cursor, and diagnostics using AES-256-GCM with a key held by Android Keystore. The secure preferences are excluded from cloud backup and device transfer because the Keystore key is device-bound.
+- `ArgentasGatewayWorker.kt` uses WorkManager with connected-network constraints. It POSTs queued deliveries, polls GET pages, persists inbox rows before advancing the composite cursor, and relies on server idempotency after interrupted/retried sends.
+- The queue rejects overflow instead of dropping messages. Inbox page persistence is all-or-nothing with respect to capacity, so the cursor cannot advance past a partially stored page.
+- Gateway configuration accepts only HTTPS Supabase project hosts and validates the high-entropy device-token format. The token is never returned through the JavaScript bridge.
+- The app-side bridge and worker are not yet connected to the existing `ArgentasSupabaseTransport` message router. No production or staging token is provisioned, and no gateway traffic is being sent.
+- The old Bluetooth controls remain nonfunctional in this revision; the new HTTP gateway is a separate staged path.
 
 ## Release sequence (required)
-1. Implement the Android gateway HTTP client and secure token storage without replacing the legacy transport.
-2. Build and test the Android transport adapter against a separate Supabase staging project.
-3. Generate one token per device on a trusted admin workstation. Deliver tokens directly to the paired devices; never put them in source, logs, screenshots, or chat.
-4. Apply the migration to staging and insert only token hashes into the device registry.
-5. Deploy the Edge Function to staging with `verify_jwt=false` and its service-role secret configured in Supabase secrets.
-6. Verify: unauthorized token rejected; revoked token rejected; two registered devices exchange messages; same delivery ID retry yields one row; sender does not receive its own message; payload >256 KB rejected; device A cannot impersonate device B; pagination handles multiple messages with identical timestamps.
-7. Migrate the Android client to POST/GET gateway with durable delivery IDs, persisted composite cursor, retry handling, and secure token storage (Android Keystore).
-8. Run parallel soak tests and reconcile message counts against the legacy channel.
-9. Only after approval, schedule production rollout and keep legacy transport available for rollback.
-10. Revoke legacy `anon`/public access to `argentas_conexion` only after every active client is migrated and verified.
+1. Finish the JavaScript adapter that maps the existing app message router to `ArgentasNativeGateway`, with explicit staging-only enablement and ACK only after successful application.
+2. Add an admin-only native provisioning path for the staging endpoint and per-device token; never put raw tokens in source, logs, screenshots, or chat.
+3. Build and inspect the audit APK; confirm the legacy transport still works and that the gateway remains inactive when not configured.
+4. Generate one token per device on a trusted admin workstation. Insert only SHA-256 token hashes into the staging device registry.
+5. Apply the migration to a separate Supabase staging project and deploy the Edge Function there with `verify_jwt=false` and its service-role secret configured in Supabase secrets.
+6. Verify: unauthorized token rejected; revoked token rejected; two registered devices exchange messages; same delivery ID retry yields one row; sender does not receive its own message; payload >256 KB rejected; device A cannot impersonate device B; pagination handles multiple messages with identical timestamps; offline outbox survives app/process restart.
+7. Run parallel soak tests and reconcile message counts against the legacy channel.
+8. Only after approval, schedule production rollout and keep legacy transport available for rollback.
+9. Revoke legacy `anon`/public access to `argentas_conexion` only after every active client is migrated and verified.
 
 ## Provisioning token hashes
 Generate each token on a trusted machine using a cryptographically secure random generator (for example, 32 random bytes encoded as hex). Compute SHA-256 locally and insert only the hash:
@@ -53,9 +57,11 @@ where device_id = '<device-id>';
 Do not drop the new tables during rollback. Revert Android clients to the legacy transport, disable the Edge Function, and leave the new schema/data intact for diagnosis. Do not alter or purge `argentas_conexion` during the rollout.
 
 ## Known remaining work
-- Implement the Android gateway HTTP client, persistent outbox, composite cursor, ACK/processing semantics, and Android Keystore enrollment.
+- Connect the native gateway bridge to the existing JavaScript message router. The current implementation is a durable transport foundation, not yet the app's active synchronization path.
+- Add an admin-only native provisioning screen for endpoint and token enrollment; no token is currently provisioned.
+- Add instrumentation/unit tests for Android queue recovery and run CI build validation.
+- Add a staging environment and run real gateway integration tests before any production rollout.
 - Replace or repair the nonfunctional Bluetooth controls; do not advertise them as available until native methods exist and two physical devices pass testing.
-- Add staging environment and run real gateway integration tests before any production rollout.
 - A guided pairing flow is not implemented; current provisioning is an admin-operated staging step.
 - The legacy Pusher/Realtime channel and its broad policies remain active until rollout completion.
 - No production migration or Edge Function deployment has been performed.

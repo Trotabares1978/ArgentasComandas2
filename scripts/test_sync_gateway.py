@@ -48,6 +48,7 @@ checks = {
     "POST requires exact JSON media type": 'contentType !== "application/json"' in EDGE and "unsupported_media_type" in EDGE,
     "invalid UTF-8 is rejected": 'new TextDecoder("utf-8", { fatal: true })' in EDGE,
     "GET cursor is strict ISO-8601 before PostgREST interpolation": "const isoCursor =" in EDGE and "!isoCursor.test(after)" in EDGE,
+    "new devices start at the beginning of gateway history": 'params.get("after") || "1970-01-01T00:00:00.000Z"' in EDGE,
     "GET cursor regex uses single JavaScript escapes": r"const isoCursor = /^\d{4}-\d{2}" in EDGE,
     "GET excludes inactive and revoked senders": '.eq("active", true)' in EDGE and '.is("revoked_at", null)' in EDGE and '.in("sender_device_id", allowedSenders)' in EDGE,
     "GET uses a composite timestamp/id cursor": "after_id" in EDGE and "created_at.gt." in EDGE,

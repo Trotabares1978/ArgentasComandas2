@@ -69,7 +69,7 @@ Do not drop the new tables during rollback. Revert Android clients to the legacy
 
 ## Staging adapter status
 
-The Android build now injects a native gateway adapter into the packaged HTML. It dual-writes the existing state snapshot to the encrypted native outbox only after staging has been explicitly enabled; the Bluetooth path remains untouched and active as before. Incoming gateway messages are accepted only when they contain a valid state snapshot, merged through the app's existing merge routine, and locally acknowledged only after that routine returns successfully.
+The Android build injects a native gateway adapter into the packaged HTML. It dual-writes supported outbound synchronization messages to the encrypted native outbox only after staging has been explicitly enabled; the existing Supabase transport is still called unchanged. Incoming gateway messages pass through the app's existing message router and are locally acknowledged only when the router reports successful handling. Ephemeral hello messages are not queued.
 
 Credential provisioning is intentionally restricted to debug builds. In a debug APK, a small floating “Gateway · staging” panel appears at the lower-right corner; an administrator can enter the Supabase Edge Function endpoint and that device's individual bearer token there. The token field is cleared immediately after the native call; the native layer validates the endpoint/token and stores them encrypted with Android Keystore. The web layer stores only the staging on/off flag, never the credential. Release builds cannot provision credentials through this bridge.
 

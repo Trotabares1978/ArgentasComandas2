@@ -69,6 +69,7 @@ checks = {
     "gateway bearer tokens are high-entropy format checked": 'Regex("[A-Za-z0-9_-]{32,256}")' in WORKER,
     "outbox is persisted before scheduling network work": 'writeArray(context, OUTBOX, queue)' in WORKER and 'enqueueUniqueWork(' in WORKER,
     "outbox is idempotent by delivery ID": 'optString("deliveryId") == deliveryId' in WORKER,
+    "malformed persisted outbox entries fail safely without being silently dropped": "Hay un mensaje dañado en la cola de envíos" in WORKER and "if (deliveryId.isBlank() || payload == null)" in WORKER and "return Result.failure()" in WORKER,
     "WorkManager POST batch is bounded": "const val MAX_POSTS_PER_RUN = 15" in WORKER and "minOf(outgoing.length(), MAX_POSTS_PER_RUN)" in WORKER,
     "bounded worker runs chain another run when outbound backlog remains": "scheduleContinuation(applicationContext)" in WORKER and "outgoing.length() > MAX_POSTS_PER_RUN" in WORKER and "ExistingWorkPolicy.APPEND_OR_REPLACE" in WORKER,
     "bounded worker runs continue paging when a full five-page batch is fetched": "pagesFetched == 5" in WORKER and "pagesFetched++" in WORKER,

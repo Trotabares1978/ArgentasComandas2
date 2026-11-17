@@ -66,3 +66,14 @@ Do not drop the new tables during rollback. Revert Android clients to the legacy
 - A guided pairing flow is not implemented; current provisioning is an admin-operated staging step.
 - The legacy Pusher/Realtime channel and its broad policies remain active until rollout completion.
 - No production migration or Edge Function deployment has been performed.
+
+
+## Staging adapter status
+
+The Android build now injects a native gateway adapter into the packaged HTML. It dual-writes the existing state snapshot to the encrypted native outbox only after staging has been explicitly enabled; the Bluetooth path remains untouched and active as before. Incoming gateway messages are accepted only when they contain a valid state snapshot, merged through the app's existing merge routine, and locally acknowledged only after that routine returns successfully.
+
+Credential provisioning is intentionally restricted to debug builds. In a debug APK, the Bluetooth settings panel exposes a staging-only section where an administrator can enter the Supabase Edge Function endpoint and that device's individual bearer token. The token field is cleared immediately after the native call; the native layer validates the endpoint/token and stores them encrypted with Android Keystore. The web layer stores only the staging on/off flag, never the credential. Release builds cannot provision credentials through this bridge.
+
+The gateway adapter bounds each serialized snapshot to 240 KB before enqueueing (below the 256 KB server limit) and derives an idempotency key from the snapshot content. Staging is opt-in and does not change the existing Bluetooth transport. Do not enable it until a staging Supabase project has the migration applied and each test device has its own provisioned token.
+
+Still required before production: apply the SQL migration and deploy the Edge Function to a dedicated staging Supabase project; provision at least two separate device tokens; run physical two-device tests including offline/retry, duplicate delivery, simultaneous edits, queue-full behavior, and app restart; then perform a soak test. No production migration, Edge Function deployment, or production credential provisioning has been performed.

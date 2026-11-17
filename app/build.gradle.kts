@@ -13,6 +13,16 @@ android {
         targetSdk = 35
         versionCode = 47
         versionName = "0.4.7"
+        resValue("string", "app_name", "Argentas")
+    }
+
+    buildTypes {
+        getByName("debug") {
+            // Install the audit build alongside production without replacing its data.
+            applicationIdSuffix = ".audit"
+            versionNameSuffix = "-audit"
+            resValue("string", "app_name", "Argentas (Prueba)")
+        }
     }
 
     compileOptions {

@@ -91,7 +91,13 @@ class MainActivity : AppCompatActivity() {
 
     inner class NativeBridge {
         @JavascriptInterface
+        fun isDebugBuild(): Boolean {
+            return (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        }
+
+        @JavascriptInterface
         fun configureGateway(endpoint: String, token: String): Boolean {
+            if (!isDebugBuild()) return false
             return try {
                 ArgentasGatewayQueue.configure(this@MainActivity, endpoint, token)
                 ArgentasGatewayQueue.schedule(this@MainActivity)

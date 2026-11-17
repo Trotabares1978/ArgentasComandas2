@@ -58,9 +58,8 @@ where device_id = '<device-id>';
 Do not drop the new tables during rollback. Revert Android clients to the legacy transport, disable the Edge Function, and leave the new schema/data intact for diagnosis. Do not alter or purge `argentas_conexion` during the rollout.
 
 ## Known remaining work
-- Connect the native gateway bridge to the existing JavaScript message router. The current implementation is a durable transport foundation, not yet the app's active synchronization path.
-- Add an admin-only native provisioning screen for endpoint and token enrollment; no token is currently provisioned.
-- Add instrumentation/unit tests for Android queue recovery and run CI build validation.
+- Add Android instrumentation tests for queue recovery, encryption failure, and WorkManager retry behavior; static contract tests and CI compilation are in place.
+- Provision a dedicated staging Supabase project and per-device tokens; none are currently provisioned.
 - Add a staging environment and run real gateway integration tests before any production rollout.
 - Replace or repair the nonfunctional Bluetooth controls; do not advertise them as available until native methods exist and two physical devices pass testing.
 - A guided pairing flow is not implemented; current provisioning is an admin-operated staging step.

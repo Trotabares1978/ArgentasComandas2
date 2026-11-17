@@ -47,7 +47,7 @@ Deno.serve(async (req: Request) => {
 
   if (req.method === "POST") {
     const contentLength = req.headers.get("Content-Length");
-    if (contentLength && (!/^\\d+$/.test(contentLength) || Number(contentLength) > MAX_BODY_BYTES)) {
+    if (contentLength && (!/^\d+$/.test(contentLength) || Number(contentLength) > MAX_BODY_BYTES)) {
       return reply(413, { error: "payload_too_large" });
     }
     let rawBody: string;
@@ -76,7 +76,7 @@ Deno.serve(async (req: Request) => {
   const limitRaw = Number(params.get("limit") || 200);
   const limit = Number.isFinite(limitRaw) ? Math.min(500, Math.max(1, Math.floor(limitRaw))) : 200;
   if (Number.isNaN(Date.parse(after))) return reply(400, { error: "invalid_after" });
-  if (!/^\\d+$/.test(afterIdRaw) || !Number.isSafeInteger(afterId) || afterId < 0) {
+  if (!/^\d+$/.test(afterIdRaw) || !Number.isSafeInteger(afterId) || afterId < 0) {
     return reply(400, { error: "invalid_after_id" });
   }
   // Composite cursor prevents losing rows that share the same created_at timestamp.

@@ -54,7 +54,7 @@ checks = {
     "GET has deterministic tie-breaking order": '.order("created_at", { ascending: true })' in EDGE and '.order("id", { ascending: true })' in EDGE,
     "GET returns the next durable cursor": "nextCursor: last ? { after: last.created_at, after_id: last.id } : null" in EDGE,
     "composite cursor index exists": "(created_at asc, id asc)" in SQL,
-    "rollback and rollout documented": "Rollback" in GUIDE and "native gateway bridge" in GUIDE and "Android Keystore" in GUIDE,
+    "rollback and rollout documented": "Rollback" in GUIDE and "ArgentasNativeGateway" in GUIDE and "Android Keystore" in GUIDE,
     "no staging or production deployment claimed": "has NOT been deployed to Supabase staging or production" in GUIDE,
     "Android gateway storage uses Android Keystore": '"AndroidKeyStore"' in SECURE and "KeyGenParameterSpec" in SECURE,
     "Android gateway storage uses AES-GCM authenticated encryption": '"AES/GCM/NoPadding"' in SECURE and "GCMParameterSpec(128, iv)" in SECURE,

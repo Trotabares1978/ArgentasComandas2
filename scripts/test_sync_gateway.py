@@ -4,7 +4,7 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-SQL = (ROOT / "database/migrations/20261117000100_argentas_sync_gateway.sql").read_text()
+SQL = (ROOT / "supabase/migrations/20261117000100_argentas_sync_gateway.sql").read_text()
 EDGE = (ROOT / "supabase/functions/argentas-sync-gateway/index.ts").read_text()
 GUIDE = (ROOT / "docs/SYNC_GATEWAY_ROLLOUT.md").read_text()
 SECURE = (ROOT / "app/src/main/java/com/trotabares/argentascomandas/GatewaySecureStore.kt").read_text()

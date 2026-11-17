@@ -173,7 +173,7 @@ class ArgentasGatewayWorker(context: Context, params: WorkerParameters) : Worker
     private data class HttpResult(val code: Int, val body: String)
     private companion object {
         // Bound each WorkManager execution well below Android's 10-minute worker limit.
-        const val MAX_POSTS_PER_RUN = 20
+        const val MAX_POSTS_PER_RUN = 15
     }
 
     override fun doWork(): Result {
@@ -241,7 +241,7 @@ class ArgentasGatewayWorker(context: Context, params: WorkerParameters) : Worker
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = 10_000
-            readTimeout = 15_000
+            readTimeout = 10_000
             instanceFollowRedirects = false
             useCaches = false
             setRequestProperty("Authorization", "Bearer $token")

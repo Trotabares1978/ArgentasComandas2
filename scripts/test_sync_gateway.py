@@ -2,6 +2,7 @@
 """Static contract checks for the staged Argentas sync gateway."""
 from pathlib import Path
 import hashlib
+import os
 import re
 import subprocess
 import sys
@@ -88,6 +89,14 @@ with tempfile.TemporaryDirectory() as tmp:
         result.returncode == 0 and hashlib.sha256(token.encode()).hexdigest() in sql
         and token not in sql
     )
+    checks["provisioner protects secret files and directory permissions"] = (
+        os.name != "posix" or (
+            (token_file.stat().st_mode & 0o777) == 0o600
+            and (sql_file.stat().st_mode & 0o777) == 0o600
+            and (Path(tmp).stat().st_mode & 0o777) == 0o700
+        )
+    )
+    checks["credential output directory is ignored by Git"] = "argentas-device-secrets/" in (ROOT / ".gitignore").read_text()
     checks["provisioner refuses to overwrite existing credentials"] = (
         subprocess.run(
             [sys.executable, str(provisioner), "--device-id", "tablet-test-01", "--label", "tablet test", "--out-dir", tmp],

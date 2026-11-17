@@ -24,7 +24,7 @@ checks = {
     "GET rejects malformed cursor IDs": "if (!/^[0-9]+$/.test(afterIdRaw)" in EDGE,
     "GET has deterministic tie-breaking order": '.order("created_at", { ascending: true })' in EDGE and '.order("id", { ascending: true })' in EDGE,
     "GET returns the next durable cursor": "nextCursor: last ? { after: last.created_at, after_id: last.id } : null" in EDGE,
-    "rollback and rollout documented": "Rollback" in GUIDE and "Android client integration" in GUIDE,
+    "rollback and rollout documented": "Rollback" in GUIDE and "gateway HTTP client" in GUIDE and "Android Keystore" in GUIDE,
     "no production migration claimed": "has NOT been deployed to Supabase production" in GUIDE,
 }
 failed = [name for name, ok in checks.items() if not ok]

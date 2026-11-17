@@ -164,13 +164,17 @@ internal object ArgentasGatewayQueue {
 
 class ArgentasGatewayWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
     private data class HttpResult(val code: Int, val body: String)
+    private companion object {
+        // Bound each WorkManager execution well below Android's 10-minute worker limit.
+        const val MAX_POSTS_PER_RUN = 20
+    }
 
     override fun doWork(): Result {
         val endpoint = ArgentasGatewayQueue.endpoint(applicationContext) ?: return Result.success()
         val token = ArgentasGatewayQueue.token(applicationContext) ?: return Result.success()
         return try {
             val outgoing = ArgentasGatewayQueue.outbox(applicationContext)
-            for (i in 0 until outgoing.length()) {
+            for (i in 0 until minOf(outgoing.length(), MAX_POSTS_PER_RUN)) {
                 val item = outgoing.optJSONObject(i) ?: continue
                 val deliveryId = item.optString("deliveryId")
                 val payload = item.optJSONObject("payload") ?: continue

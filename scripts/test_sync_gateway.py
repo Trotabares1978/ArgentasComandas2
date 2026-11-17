@@ -15,7 +15,16 @@ MANIFEST = (ROOT / "app/src/main/AndroidManifest.xml").read_text()
 BACKUP = (ROOT / "app/src/main/res/xml/backup_rules.xml").read_text()
 EXTRACTION = (ROOT / "app/src/main/res/xml/data_extraction_rules.xml").read_text()
 
+ASSET = (ROOT / "app/src/main/assets/index.html").read_text(encoding="utf-8")
+
 checks = {
+    "gateway adapter is injected into packaged HTML": 'id="argentas-gateway-adapter"' in ASSET,
+    "gateway sends snapshots alongside legacy Bluetooth": "ArgentasGatewayTransport.sendState(db)" in ASSET and "ArgentasNativeBluetooth.send" in ASSET,
+    "gateway staging is opt-in and debug-only": "argentas_gateway_staging_enabled" in ASSET and "isDebugBuild" in ASSET,
+    "gateway inbox ACK follows successful state application": "if(applyPayload(payload))ack.push(String(row.id))" in ASSET,
+    "gateway applies only validated state snapshots": 'payload.type!=="state"' in ASSET and "Array.isArray(payload.db.orders)" in ASSET,
+    "gateway credentials are not stored in web storage": "localStorage.setItem(ENABLE_KEY" in ASSET and "localStorage.setItem(.*token" not in ASSET,
+    "gateway message size is bounded before enqueue": "new TextEncoder().encode(json).length>240000" in ASSET,
     "device token hash stored, not raw token": "token_hash text not null unique" in SQL,
     "device registry RLS enabled": "alter table public.argentas_sync_devices enable row level security" in SQL,
     "messages RLS enabled": "alter table public.argentas_sync_messages enable row level security" in SQL,
@@ -59,6 +68,7 @@ checks = {
     "WorkManager has connected-network constraints": "NetworkType.CONNECTED" in WORKER and "PeriodicWorkRequestBuilder" in WORKER,
     "native bridge exposes gateway queue without exposing token getter": "enqueueGatewayMessage" in ACTIVITY and "gatewayInbox" in ACTIVITY and "fun getGatewayToken" not in ACTIVITY,
     "native bridge exposes configuration and ACK methods": "configureGateway" in ACTIVITY and "acknowledgeGatewayInbox" in ACTIVITY,
+    "gateway credential provisioning is debug-build-only": "fun isDebugBuild()" in ACTIVITY and "if (!isDebugBuild()) return false" in ACTIVITY,
     "WebView blocks untrusted frames from JavaScript bridge": "if (!request.isForMainFrame) return true" in ACTIVITY and 'uri.path?.startsWith("/android_asset/") == true' in ACTIVITY,
     "foreground polling stops when Activity pauses": "gatewayPollHandler.postDelayed(gatewayPoll, 15_000)" in ACTIVITY and "gatewayPollHandler.removeCallbacks(gatewayPoll)" in ACTIVITY,
     "foreground polling does not cancel active worker": "ExistingWorkPolicy.KEEP" in WORKER,

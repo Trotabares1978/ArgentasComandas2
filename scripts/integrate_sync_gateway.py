@@ -14,7 +14,7 @@ if html.count("</body>") != 1:
     raise SystemExit(f"Expected exactly one </body>, found {html.count('</body>')}")
 
 # Make the existing router report whether it actually applied a message.
-router_start = "handle:function(raw){raw.trim().split('\\\\n').filter(Boolean).forEach(function(line){try{"
+router_start = "handle:function(raw){raw.trim().split('\\n').filter(Boolean).forEach(function(line){try{"
 router_start_new = "handle:function(raw){var handled=true;raw.trim().split('\\\\n').filter(Boolean).forEach(function(line){try{"
 if html.count(router_start) == 1:
     html = html.replace(router_start, router_start_new, 1)
@@ -112,7 +112,12 @@ adapter = r"""
       var id=deliveryId(message);
       if(!id||id.length>200)return;
       try{
-        var accepted=native.enqueueGatewayMessage(id,JSON.stringify(message));
+        var payloadJson=JSON.stringify(message);
+        if(new TextEncoder().encode(payloadJson).length>240000){
+          console.warn("Argentas gateway: mensaje demasiado grande; se conserva el transporte anterior",id);
+          return;
+        }
+        var accepted=native.enqueueGatewayMessage(id,payloadJson);
         if(!accepted)console.warn("Argentas gateway: no se pudo encolar",id);
       }catch(e){console.warn("Argentas gateway enqueue:",e)}
     });

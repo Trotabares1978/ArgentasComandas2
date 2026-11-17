@@ -13,6 +13,16 @@ android {
         targetSdk = 35
         versionCode = 47
         versionName = "0.4.7"
+        resValue("string", "app_name", "Argentas")
+    }
+
+    buildTypes {
+        getByName("debug") {
+            // Install the audit build alongside production without replacing its data.
+            applicationIdSuffix = ".audit"
+            versionNameSuffix = "-audit"
+            resValue("string", "app_name", "Argentas")
+        }
     }
 
     compileOptions {
@@ -31,4 +41,5 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
 }

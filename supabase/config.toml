@@ -1,0 +1,2 @@
+[functions.argentas-sync-gateway]
+verify_jwt = false

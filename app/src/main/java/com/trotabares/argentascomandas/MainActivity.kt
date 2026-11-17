@@ -4,6 +4,8 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
@@ -13,6 +15,15 @@ import androidx.appcompat.app.AppCompatActivity
 
 class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
+    private val gatewayPollHandler = Handler(Looper.getMainLooper())
+    private val gatewayPoll = object : Runnable {
+        override fun run() {
+            if (!isFinishing && !isDestroyed) {
+                ArgentasGatewayQueue.schedule(this@MainActivity)
+                gatewayPollHandler.postDelayed(this, 15_000)
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,6 +58,13 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         ArgentasGatewayQueue.schedule(this)
+        gatewayPollHandler.removeCallbacks(gatewayPoll)
+        gatewayPollHandler.postDelayed(gatewayPoll, 15_000)
+    }
+
+    override fun onPause() {
+        gatewayPollHandler.removeCallbacks(gatewayPoll)
+        super.onPause()
     }
 
     inner class NativeBridge {

@@ -76,3 +76,8 @@ Credential provisioning is intentionally restricted to debug builds. In a debug 
 The gateway adapter bounds each serialized snapshot to 240 KB before enqueueing (below the 256 KB server limit) and derives an idempotency key from the snapshot content. Staging is opt-in and does not change the existing Bluetooth transport. Do not enable it until a staging Supabase project has the migration applied and each test device has its own provisioned token.
 
 Still required before production: apply the SQL migration and deploy the Edge Function to a dedicated staging Supabase project; provision at least two separate device tokens; run physical two-device tests including offline/retry, duplicate delivery, simultaneous edits, queue-full behavior, and app restart; then perform a soak test. No production migration, Edge Function deployment, or production credential provisioning has been performed.
+
+
+## Additional production gap
+
+The gateway currently uses durable per-device cursors on the client, but it does not yet send server-side recipient acknowledgements or prune old message rows. This avoids deleting messages that an offline device has not received, but the message table can grow indefinitely. Before production, add recipient-level delivery receipts and a retention policy that only prunes after all active recipients have acknowledged (with a documented expiry policy for devices that remain offline for an extended period). Do not add a simple age-based delete while devices rely on their local cursor; that could silently remove messages from an offline phone.

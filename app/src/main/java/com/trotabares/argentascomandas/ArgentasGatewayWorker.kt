@@ -27,7 +27,8 @@ internal object ArgentasGatewayQueue {
 
     fun configure(context: Context, endpoint: String, token: String) = synchronized(lock) {
         val uri = Uri.parse(endpoint)
-        require(uri.scheme == "https" && !uri.host.isNullOrBlank() && uri.userInfo == null)
+        val host = uri.host?.lowercase().orEmpty()
+        require(uri.scheme == "https" && host.endsWith(".supabase.co") && uri.userInfo == null)
         require(uri.path?.endsWith("/functions/v1/argentas-sync-gateway") == true)
         require(uri.query.isNullOrEmpty() && uri.fragment.isNullOrEmpty())
         require(token.matches(Regex("[A-Za-z0-9_-]{32,256}")))

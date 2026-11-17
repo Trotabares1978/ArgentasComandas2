@@ -71,7 +71,7 @@ Deno.serve(async (req: Request) => {
   const limitRaw = Number(params.get("limit") || 200);
   const limit = Number.isFinite(limitRaw) ? Math.min(500, Math.max(1, Math.floor(limitRaw))) : 200;
   if (Number.isNaN(Date.parse(after))) return reply(400, { error: "invalid_after" });
-  if (!/^\\d+$/.test(afterIdRaw) || !Number.isSafeInteger(afterId) || afterId < 0) {
+  if (!/^[0-9]+$/.test(afterIdRaw) || !Number.isSafeInteger(afterId) || afterId < 0) {
     return reply(400, { error: "invalid_after_id" });
   }
   // Composite cursor prevents losing rows that share the same created_at timestamp.

@@ -19,6 +19,10 @@ ASSET = (ROOT / "app/src/main/assets/index.html").read_text(encoding="utf-8")
 
 checks = {
     "gateway adapter is injected into packaged HTML": 'id="argentas-gateway-adapter"' in ASSET,
+    "router returns a delivery-handling result": "var handled=true;raw.trim().split" in ASSET and "return handled}" in ASSET,
+    "router marks unsupported messages unhandled": "}else{handled=false}" in ASSET,
+    "router marks parse/apply exceptions unhandled": "catch(e){handled=false;console.warn('Mensaje de sincronización inválido',e)}" in ASSET,
+    "gateway uses stable delivery identifiers": "if(message.deliveryId)return String(message.deliveryId)" in ASSET and "if(message.msgId)return" in ASSET,
     "gateway dual-writes the existing Supabase transport": "var original=transport.send" in ASSET and "return original.apply(this,arguments)" in ASSET,
     "gateway staging is opt-in and debug-only": "argentas_gateway_staging_enabled" in ASSET and "isDebugBuild" in ASSET,
     "gateway inbox ACK requires successful existing router handling": "window.onSupabaseMessage(JSON.stringify(payload))===true" in ASSET,

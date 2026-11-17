@@ -23,7 +23,7 @@ checks = {
     "gateway staging is opt-in and debug-only": "argentas_gateway_staging_enabled" in ASSET and "isDebugBuild" in ASSET,
     "gateway inbox ACK follows successful state application": "if(applyPayload(payload))ack.push(String(row.id))" in ASSET,
     "gateway applies only validated state snapshots": 'payload.type!=="state"' in ASSET and "Array.isArray(payload.db.orders)" in ASSET,
-    "gateway credentials are not stored in web storage": "localStorage.setItem(ENABLE_KEY" in ASSET and "localStorage.setItem(.*token" not in ASSET,
+    "gateway credentials are not stored in web storage": "localStorage.setItem(ENABLE_KEY" in ASSET and "localStorage.setItem(\"device_token\"" not in ASSET and "localStorage.setItem(\"argentas_gateway_token\"" not in ASSET,
     "gateway message size is bounded before enqueue": "new TextEncoder().encode(json).length>240000" in ASSET,
     "device token hash stored, not raw token": "token_hash text not null unique" in SQL,
     "device registry RLS enabled": "alter table public.argentas_sync_devices enable row level security" in SQL,

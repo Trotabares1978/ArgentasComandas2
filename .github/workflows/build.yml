@@ -53,6 +53,9 @@ jobs:
       - name: Prevent self-ACK during Supabase history recovery
         run: python3 scripts/fix_supabase_recovery_origin.py
 
+      - name: Fix comanda status ACK and retry queue
+        run: python3 scripts/fix_comanda_status_queue.py
+
       - name: Prepare icon
         run: |
           sudo apt-get update -qq

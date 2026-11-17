@@ -71,7 +71,11 @@ class MainActivity : AppCompatActivity() {
         }
         webView.webChromeClient = WebChromeClient()
         webView.addJavascriptInterface(NativeBridge(), "ArgentasNativeBluetooth")
-        webView.addJavascriptInterface(NativeBridge(), "ArgentasNativeGateway")
+        // The gateway bridge is absent entirely from release WebViews. Debug-only
+        // methods are not enough: @JavascriptInterface is exposed to every frame.
+        if (isDebuggable) {
+            webView.addJavascriptInterface(NativeBridge(), "ArgentasNativeGateway")
+        }
         ArgentasGatewayQueue.schedulePeriodic(this)
         setContentView(webView)
         webView.loadUrl("file:///android_asset/index.html")

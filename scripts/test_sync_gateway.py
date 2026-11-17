@@ -20,6 +20,9 @@ ASSET = (ROOT / "app/src/main/assets/index.html").read_text(encoding="utf-8")
 
 checks = {
     "gateway adapter is injected": 'id="argentas-gateway-adapter"' in ASSET,
+    "gateway controls are hidden during normal use": "Gateway · staging (debug)" not in ASSET and "function installDebugShortcut()" in ASSET,
+    "gateway controls require seven quick brand taps": "if(taps>=7){taps=0;clearTimeout(timer);addDebugPanel()}" in ASSET,
+    "debug app display name remains Argentas": 'resValue("string", "app_name", "Argentas")' in (ROOT / "app/build.gradle.kts").read_text() and "Argentas (Prueba)" not in (ROOT / "app/build.gradle.kts").read_text(),
     "router returns handled result": "var handled=true;raw.trim().split" in ASSET and "return handled}" in ASSET,
     "router rejects unsupported messages": "}else{handled=false}" in ASSET,
     "router only ACKs successfully applied inbox messages": "window.onSupabaseMessage(JSON.stringify(payload))===true" in ASSET,

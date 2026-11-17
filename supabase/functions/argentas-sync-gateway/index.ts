@@ -73,6 +73,19 @@ Deno.serve(async (req: Request) => {
   if (deviceError) return reply(503, { error: "device_lookup_failed" });
   if (!device) return reply(401, { error: "unauthorized" });
 
+  const operation = req.method === "POST" ? "write" : "read";
+  const { data: allowed, error: rateError } = await db.rpc("argentas_sync_consume_rate_limit", {
+    p_device_id: device.device_id,
+    p_operation: operation,
+  });
+  if (rateError) return reply(503, { error: "rate_limit_unavailable" });
+  if (allowed !== true) {
+    return new Response(JSON.stringify({ error: "rate_limited" }), {
+      status: 429,
+      headers: { ...cors, "Retry-After": "60" },
+    });
+  }
+
   if (req.method === "POST") {
     const contentType = (req.headers.get("Content-Type") || "").split(";", 1)[0].trim().toLowerCase();
     if (contentType !== "application/json") return reply(415, { error: "unsupported_media_type" });
